@@ -1,0 +1,498 @@
+services:
+  # ============ DATABASE & UI ============
+  mongo:
+    image: mongo:6.0
+    container_name: mongo-s1n2
+    command: --bind_ip 0.0.0.0
+    env_file:
+      - .env
+    volumes:
+      - mongodbdata:/data/db
+      - mongodbdata:/data/configdb
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "27017/udp"
+      - "27017/tcp"
+    networks:
+      default:
+        ipv4_address: ${MONGO_IP}
+
+  webui:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    container_name: webui-s1n2
+    depends_on:
+      - mongo
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=webui
+    volumes:
+      - ../webui:/mnt/webui
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "9999/tcp"
+    ports:
+      - "9999:9999/tcp"
+    networks:
+      default:
+        ipv4_address: ${WEBUI_IP}
+
+  # ============ 5G CORE NETWORK ============
+  nrf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    container_name: nrf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=nrf
+    volumes:
+      - ../config/5g/nrf:/mnt/nrf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${NRF_IP}
+
+  scp:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+    container_name: scp-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=scp
+    volumes:
+      - ../config/5g/scp:/mnt/scp
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${SCP_IP}
+
+  ausf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+    container_name: ausf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=ausf
+    volumes:
+      - ../config/5g/ausf:/mnt/ausf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${AUSF_IP}
+
+  udr:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+      - mongo
+    container_name: udr-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=udr
+    volumes:
+      - ../config/5g/udr:/mnt/udr
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${UDR_IP}
+
+  udm:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+      - udr
+    container_name: udm-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=udm
+    volumes:
+      - ../config/5g/udm:/mnt/udm
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${UDM_IP}
+
+  pcf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+      - mongo
+    container_name: pcf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=pcf
+    volumes:
+      - ../config/5g/pcf:/mnt/pcf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+      - "9091/tcp"
+    networks:
+      default:
+        ipv4_address: ${PCF_IP}
+
+  bsf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+      - mongo
+    container_name: bsf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=bsf
+    volumes:
+      - ../config/5g/bsf:/mnt/bsf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${BSF_IP}
+
+  nssf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+    container_name: nssf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=nssf
+    volumes:
+      - ../config/5g/nssf:/mnt/nssf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "7777/tcp"
+    networks:
+      default:
+        ipv4_address: ${NSSF_IP}
+
+  smf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    depends_on:
+      - nrf
+      - scp
+      - udm
+      - pcf
+    container_name: smf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=smf
+      - DEPLOY_MODE=5G
+    volumes:
+      - ../config/5g/smf:/mnt/smf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "3868/tcp"
+      - "3868/sctp"
+      - "5868/tcp"
+      - "5868/sctp"
+      - "8805/udp"
+      - "2123/udp"
+      - "7777/tcp"
+      - "9091/tcp"
+    networks:
+      default:
+        ipv4_address: ${SMF_IP}
+
+  upf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    image: s1n2-gw-upf
+    depends_on:
+      - smf
+    container_name: upf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=upf
+    volumes:
+      - ../config/5g/upf:/mnt/upf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "2152/udp"
+      - "8805/udp"
+      - "9091/tcp"
+    cap_add:
+      - NET_ADMIN
+    privileged: true
+    sysctls:
+      - net.ipv4.ip_forward=1
+    networks:
+      default:
+        ipv4_address: ${UPF_IP}
+      n6:
+        ipv4_address: ${UPF_N6_IP}
+
+  # ============ UE -> DN TEST (PING / IPERF / IRTT) =========
+  # NOTE: This container is ONLY on the N6-side network.
+  # UE traffic reaches it via UPF (ogstun -> eth1 on n6).
+  ue-dn-tools:
+    # Reuse the already-built Open5GS base image (has ip/iptables/ping/iperf3).
+    image: s1n2-gw-upf
+    depends_on:
+      - upf
+    container_name: ue-dn-tools-s1n2
+    env_file:
+      - .env
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - |
+        set -e
+        ip route del default || true
+        ip route add default via "$UPF_N6_IP"
+        # Start both irtt server and iperf3 server
+        irtt server -b 0.0.0.0 &
+        exec iperf3 -s
+    networks:
+      n6:
+        ipv4_address: ${UE_DN_TOOLS_IP}
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  amf:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    pull_policy: never
+    depends_on:
+      - nrf
+      - scp
+      - ausf
+      - udm
+      - udr
+      - pcf
+      - bsf
+      - nssf
+    container_name: amf-s1n2
+    env_file:
+      - .env
+    environment:
+      - COMPONENT_NAME=amf
+      # - STARTUP_DELAY=45  # Wait for other 5GC components
+      # NOTE: Integrity bypass removed to ensure SMC Complete is always integrity-protected and verified
+    volumes:
+      - ../config/5g/amf:/mnt/amf
+      - ../log:/open5gs/install/var/log/open5gs
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    expose:
+      - "38412/sctp"
+      - "7777/tcp"
+      - "9091/tcp"
+    networks:
+      default:
+        ipv4_address: ${AMF_IP}
+
+  # ============ S1-N2 PROTOCOL CONVERTER ============
+  s1n2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: never
+    container_name: s1n2
+    depends_on:
+      - amf
+      - upf
+    env_file:
+      - .env
+    environment:
+      - S1C_BIND_ADDR=0.0.0.0
+      - S1C_PORT=36412
+      - S1U_BIND_ADDR=0.0.0.0
+      - S1U_PORT=2152
+      - S1U_ADVERTISE_ADDR=${S1N2_IP}
+      - N2_REMOTE_ADDR=${AMF_IP}
+      - N2_REMOTE_PORT=38412
+      - N3_REMOTE_ADDR=${UPF_IP}
+      - N3_REMOTE_PORT=2152
+      - S1N2_MCC=${MCC}
+      - S1N2_MNC=${MNC}
+      - S1N2_TAC=${TAC}
+      - UPF_S1U_ADDR=${UPF_IP}
+      - STARTUP_DELAY=15
+      - AUTH_CONFIG_FILE=/config/auth_keys.yaml
+      - S1N2_NAS5G_DEBUG_ALT=1
+      # --- A/B test toggles for TAU Accept ---
+      # Case A: disable EPS bearer context status IE (0x57)
+      - S1N2_TAU_EPS_BEARER_IE=0
+      # Case B: force EPS Update Result (enable + value 0..7)
+      # - S1N2_TAU_EPS_UPDATE_RESULT_ENABLE=1
+      # - S1N2_TAU_EPS_UPDATE_RESULT=0
+      # Case C: use fixed EPS GUTI (MME_GID/MME_CODE/MTMSI)
+      # - S1N2_EPS_GUTI_FIXED_ENABLE=1
+      # - S1N2_EPS_MME_GID=0x0200
+      # - S1N2_EPS_MME_CODE=0x40
+      # - S1N2_EPS_MTMSI=0xC00002E7
+    volumes:
+      - ./config/auth_keys.yaml:/config/auth_keys.yaml:ro
+    ports:
+      - "36412:36412/sctp"
+      - "2152:2152/udp"
+    networks:
+      default:
+        ipv4_address: ${S1N2_IP}
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ["CMD", "s1n2-converter", "--healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 25s
+    restart: unless-stopped
+
+  # ============ 4G RAN ============
+  # srsenb_zmq:
+  #   build:
+  #     context: ..
+  #     dockerfile: ran/srslte/Dockerfile
+  #   depends_on:
+  #     - s1n2
+  #   container_name: srsenb_zmq-s1n2
+  #   stdin_open: true
+  #   tty: true
+  #   privileged: true
+  #   volumes:
+  #     - ../ran/srslte:/mnt/srslte
+  #     - /etc/timezone:/etc/timezone:ro
+  #     - /etc/localtime:/etc/localtime:ro
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - COMPONENT_NAME=enb_zmq
+  #     - STARTUP_DELAY=30  # Wait for converter to finish deferred startup and attach to AMF
+  #     - MME_IP=${S1N2_IP}  # Connect to S1-N2 converter instead of MME
+  #   restart: unless-stopped
+  #   expose:
+  #     - "36412/sctp"
+  #     - "2152/udp"
+  #     - "2000/tcp"
+  #     - "2001/tcp"
+  #   networks:
+  #     default:
+  #       ipv4_address: ${SRS_ENB_IP}
+
+  # srsue_zmq:
+  #   build:
+  #     context: ..
+  #     dockerfile: ran/srslte/Dockerfile
+  #   depends_on:
+  #     - srsenb_zmq
+  #   container_name: srsue_zmq-s1n2
+  #   stdin_open: true
+  #   tty: true
+  #   cap_add:
+  #     - NET_ADMIN
+  #   privileged: true
+  #   volumes:
+  #     - ../ran/srslte:/mnt/srslte
+  #     - ../ran/srsue:/mnt/srsue
+  #     - /etc/timezone:/etc/timezone:ro
+  #     - /etc/localtime:/etc/localtime:ro
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     - COMPONENT_NAME=ue_zmq
+  #     - STARTUP_DELAY=45  # Ensure eNB has completed S1 setup before UE attach
+  #   restart: unless-stopped
+  #   expose:
+  #     - "2000/tcp"
+  #     - "2001/tcp"
+  #   networks:
+  #     default:
+  #       ipv4_address: ${SRS_UE_IP}
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-s1n2-gw
+    ipam:
+      config:
+        - subnet: 172.24.0.0/16
+          gateway: 172.24.0.1
+    name: br-s1n2-gw
+
+  # Dedicated N6-side "data network" for UE ping/iperf targets.
+  # Keep it internal so traffic must traverse UPF.
+  n6:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.25.0.0/24
+    name: br-s1n2-gw-n6
+
+volumes:
+  mongodbdata:
+    name: docker_s1n2_mongodbdata

@@ -1,0 +1,35 @@
+# s1n2 Converter - Authentication Keys Configuration
+#
+# 使い方: このファイルをコピーして auth_keys.yaml に名前を変え、
+#   Open5GS WebUI に登録した加入者の Ki・OPc を設定する
+#   cp config/auth_keys.example.yaml config/auth_keys.yaml
+#
+# WARNING: This configuration bypasses end-to-end security between UE and 5G Core!
+# Use only in controlled test/development environments.
+#
+# 将来的には MongoDB から動的取得する仕組みに置き換え予定 (auth_keys.yaml 廃止)。
+# 詳細は Wiki の TODO #19 を参照。
+
+subscribers:
+  # テスト用加入者の例 (Open5GS WebUI で登録した値に合わせること)
+  - imsi: "001010000000001"               # ← Open5GS WebUI の IMSI に変更
+    ki:   "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"  # ← Ki (32桁16進数) に変更
+    opc:  "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"  # ← OPc (32桁16進数) に変更
+
+  # 加入者を追加する場合はここに追記
+  # - imsi: "001010000000002"
+  #   ki:   "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  #   opc:  "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+
+security:
+  enabled: true
+  audit_logging: true
+  auto_clear_keys: true
+  max_cache_time: 60
+
+  # RES*/XRES* KDF 実装モード (TS 33.501 Annex A.4)
+  # "standard"       : Kausf を鍵として使用 (規格準拠)
+  # "open5gs_compat" : CK||IK を鍵として使用 (Open5GS v2.7.2 のバグに合わせる)
+  res_star_kdf_mode: "open5gs_compat"
+
+  xor_to_milenage_conversion: false

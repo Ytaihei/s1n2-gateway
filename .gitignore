@@ -1,0 +1,35 @@
+# === 機密情報 ===
+# 実環境の値が含まれる設定ファイル — .env.example を代わりに使用
+.env
+# 加入者認証鍵 — config/auth_keys.example.yaml を代わりに使用
+config/auth_keys.yaml
+# ローカル保護バックアップ（機密情報を含む）
+.local-protected/
+
+# === ビルド成果物 ===
+build/
+
+# === Wiki (別リポジトリ: Ytaihei/s1n2-gateway.wiki) ===
+s1n2-gateway.wiki/
+
+# === ローカル専用スクリプト/ドキュメント（Git管理外） ===
+start.sh
+scripts/protect_local_configs.sh
+docs/
+
+# === open5gs_lib — asn1c コードはビルド時に open5gs を fetch して使用 ===
+# make が自動で https://github.com/open5gs/open5gs.git を sparse-clone する
+open5gs/
+open5gs_lib/asn1c/
+open5gs_lib/core/
+open5gs_lib/ngap/
+
+# === エディタ ===
+.vscode/
+*.code-workspace
+*.swp
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
