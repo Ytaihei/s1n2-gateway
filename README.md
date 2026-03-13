@@ -38,7 +38,8 @@
 ## リポジトリの配置
 
 本リポジトリは [open5gs-compose](https://github.com/Ytaihei/open5gs-compose)（Open5GS 簡易 Docker 環境）のサブディレクトリとして動作する。
-`docker-compose.yml` が親ディレクトリの Open5GS 設定ファイル (`../5g/`, `../open5gs/` 等) を参照するため、以下の手順で配置すること。
+`docker-compose.yml` は親ディレクトリの資材を参照する（例: `../config/5g`, `../webui`, `../log`, `base/Dockerfile`）。
+以下の手順で配置すること。
 
 ```bash
 # 1. 親リポジトリをクローン
@@ -54,17 +55,29 @@ cd s1n2-gateway
 
 ```
 open5gs-compose/                  ← 親リポジトリ (Open5GS Docker環境)
-├── 5g/                       ← 5G NF設定ファイル (AMF, SMF, UPF, …)
-├── open5gs/                  ← Open5GS Dockerfile・スクリプト
+├── base/                     ← Open5GS ベース Dockerfile
+├── config/
+│   └── 5g/                   ← 5G NF 設定ファイル (AMF, SMF, UPF, ...)
+├── webui/                    ← Open5GS WebUI 初期化資材
+├── log/                      ← Open5GS ログ出力先
+├── script/
+│   └── exclusive_mode.sh     ← 排他制御の共通関数
 └── s1n2-gateway/                  ← 本リポジトリ
     ├── docker-compose.yml
     ├── Dockerfile
-    ├── start.sh
-    ├── .env                  ← .env.example からコピーして作成
+    ├── .env                  ← .env.example からコピーして作成（Git管理外）
     ├── config/
-    │   └── auth_keys.yaml    ← auth_keys.example.yaml からコピーして作成
+    │   └── auth_keys.yaml    ← auth_keys.example.yaml からコピーして作成（Git管理外）
     └── src/                  ← s1n2-converter ソースコード
 ```
+
+`start.sh` はローカル運用用の補助スクリプト（Git管理外）として扱う。
+
+## 互換性ポリシー
+
+- `open5gs-compose` 側の `s1n2-gateway` submodule で固定されるコミットを、統合運用の正とする。
+- `s1n2-gateway` 単体の `main` は、常に親の最新 `main` と互換とは限らない。
+- 統合運用時は、親リポジトリを `git clone --recursive` で取得し、親が指す submodule コミットを使う。
 
 ## Start s1n2-Gateway
 
@@ -108,9 +121,8 @@ cp config/auth_keys.example.yaml config/auth_keys.yaml
 # ビルド
 docker compose build s1n2
 
-# 起動 (ネットワーク設定・eNB接続・コンテナ起動を一括実行)
-# ※ start.sh はローカル管理ファイル
-./start.sh
+# 起動 (公開リポジトリのみで再現可能な標準手順)
+docker compose up -d --build
 
 # ログ確認
 docker compose logs s1n2 -f
@@ -119,8 +131,10 @@ docker compose logs s1n2 -f
 docker compose down
 
 # リビルド (コード変更後)
-docker compose build s1n2 --no-cache && ./start.sh
+docker compose build s1n2 --no-cache && docker compose up -d
 ```
+
+ローカル専用の `start.sh` を使う場合は、NIC 切替や排他制御を含む追加処理を実行できる。
 
 > **NOTE**: `start.sh` は環境変数でカスタマイズ可能。デフォルト値は検証環境 (Intel NUC + Baicells Nova430x) に合わせてある。
 > 別環境では以下のように上書きする：
@@ -129,6 +143,32 @@ docker compose build s1n2 --no-cache && ./start.sh
 > ```
 > 詳細は [Wiki: eNB Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eNB-Setup-Guide#startsh-の環境変数) を参照。
 > スクリプト実装のローカル管理は `docs/` を参照。
+
+### 最小検証手順（公開リポジトリのみ）
+
+```bash
+# 1) 構成解決
+docker compose config --quiet
+
+# 2) 最小起動
+docker compose up -d --build
+
+# 3) 初期ヘルス確認
+docker compose ps
+docker logs s1n2 | grep -E 'listening S1C|N2 connected'
+
+# 4) eNB 接続時の確認
+docker logs s1n2 | grep -E 'S1SetupRequest detected|NGSetupResponse -> S1SetupResponse sent'
+```
+
+`NGSetupResponse -> S1SetupResponse sent` は eNB から S1SetupRequest が到来した場合に出力される。
+
+## README と Wiki の役割分担
+
+- README: 公開リポジトリのみで再現できる最小手順（clone / env / compose 起動 / 最小ログ確認）。
+- Wiki: eNB 機種別設定、eSIM 運用、物理ネットワーク調整、詳細設計、運用トラブルシュート。
+
+Wiki: [s1n2-gateway Wiki](https://github.com/Ytaihei/s1n2-gateway/wiki)
 
 ## アーキテクチャ
 
