@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-build:
+    name: Docker build (no integration execution)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build converter image
+        run: docker build --tag s1n2-gateway:ci .
+
+      - name: Record validation boundary
+        run: |
+          echo "Build completed."
+          echo "The RG-VPN, remote host, open5gs-compose-derived integration repository,"
+          echo "base station, and UE integration were intentionally not exercised."
