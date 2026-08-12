@@ -22,6 +22,21 @@ subscriber-data changes as high-risk changes that require focused review.
 - GitHub Actions is build-only. A successful CI build does not establish
   end-to-end compatibility with the remote host, core network, eNB, UE, or VPN.
 
+### Verified deployment topology
+
+- The local SSH alias for the authorized integration host is
+  `taihei-nuc-ubuntu`. Its configured jump host is `taihei-rgcpu`; use the SSH
+  aliases instead of copying addresses or key paths into commands or docs.
+- On the integration host, the parent repository is
+  `/home/taihei/open5gs-compose` and this repository is its submodule at
+  `/home/taihei/open5gs-compose/s1n2-gateway`.
+- The parent integration branch is currently `master`. Always verify the actual
+  branch, worktree state, and submodule pin at the start of a task rather than
+  assuming that these details are unchanged.
+- `scripts/check-remote-status.sh` is the approved read-only starting point for
+  remote inspection. It does not establish that an end-to-end UE data session
+  works.
+
 ## Safety boundaries
 
 - Never commit, print, paste into logs, or otherwise expose `.env`,
@@ -66,6 +81,10 @@ subscriber-data changes as high-risk changes that require focused review.
    authorized remote integration test is required, first provide the exact
    commands, affected services, rollback plan, and expected evidence, then wait
    for explicit approval.
+7. Before requesting an integration test, run `scripts/check-remote-status.sh`
+   to verify reachability, clean worktrees, the submodule pin, expected
+   containers, and the number of SCTP associations without retrieving logs or
+   secrets.
 
 ## Completion report
 

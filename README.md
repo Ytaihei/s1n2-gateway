@@ -184,6 +184,21 @@ U-Plane は GTP-U ヘッダの TEID を書き換えて中継する。
 
 プロジェクト構成・モジュール設計・命名規則などの詳細は [Wiki](https://github.com/Ytaihei/s1n2-gateway/wiki) を参照。
 
+## AIを利用した開発
+
+Codexなどの開発エージェントは、最初に `AGENTS.md` の安全境界を確認すること。
+通常の変更はブランチとPull Requestで行い、GitHub ActionsではDockerイメージの
+ビルドだけを実施する。実機環境の読み取り専用事前確認には次を使う。
+
+```bash
+./scripts/check-remote-status.sh
+```
+
+この確認はSSH設定済みの認可された端末からのみ実行できる。ログ、加入者情報、
+認証鍵は取得せず、実機試験やデプロイも行わない。サービスの再起動、設定変更、
+エンドツーエンド試験には、その都度、実行内容と復旧方法を提示した上で明示的な
+承認が必要となる。
+
 ## License
 
 AGPL-3.0 — See [LICENSE](LICENSE) for details.
