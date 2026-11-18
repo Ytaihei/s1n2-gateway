@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file security/security_mac_and_algo.c
  * @brief Shared security helpers: 5G uplink MAC, algorithm mapping tables
@@ -57,7 +58,7 @@ int s1n2_compute_5g_uplink_mac(
     uint8_t *mac_out
 ) {
 	if (!ue_map || !plain_nas || !mac_out || plain_len == 0) {
-		printf("[ERROR] Invalid parameters for 5G uplink MAC computation\n");
+		LOG_ERROR("Invalid parameters for 5G uplink MAC computation\n");
 		return -1;
 	}
 
@@ -71,9 +72,9 @@ int s1n2_compute_5g_uplink_mac(
 	} else if (ue_map->has_nas_keys) {
 		key_to_use = ue_map->k_nas_int;
 		key_type = "K_NASint_4G (from K_ASME)";
-		printf("[WARN] Using 4G NAS key for 5G Security Mode Complete - may cause MAC mismatch!\n");
+		LOG_WARN("Using 4G NAS key for 5G Security Mode Complete - may cause MAC mismatch!\n");
 	} else {
-		printf("[ERROR] No NAS keys available for MAC computation\n");
+		LOG_ERROR("No NAS keys available for MAC computation\n");
 		return -1;
 	}
 
@@ -89,48 +90,28 @@ int s1n2_compute_5g_uplink_mac(
 	// TODO: Get actual algorithm from ue_map if available
 	s1n2_nas_integrity_alg_t alg = S1N2_NAS_EIA2;
 
-	printf("[DEBUG] [MAC-CALC] Computing 5G uplink MAC with %s\n", key_type);
-	printf("[DEBUG] [MAC-CALC] COUNT=0x%08X, Direction=%u, Bearer=%u, Alg=EIA2\n", count, direction, bearer);
-	printf("[DEBUG] [MAC-CALC] UE Context: RAN-UE=%ld, AMF-UE=%ld\n",
+	LOG_DEBUG("[MAC-CALC] Computing 5G uplink MAC with %s\n", key_type);
+	LOG_DEBUG("[MAC-CALC] COUNT=0x%08X, Direction=%u, Bearer=%u, Alg=EIA2\n", count, direction, bearer);
+	LOG_DEBUG("[MAC-CALC] UE Context: RAN-UE=%ld, AMF-UE=%ld\n",
 	       ue_map->ran_ue_ngap_id, ue_map->amf_ue_ngap_id);
-	printf("[DEBUG] %s: ", key_type);
-	for (int i = 0; i < 16; i++) {
-		printf("%02X", key_to_use[i]);
-	}
-	printf("\n");
-	printf("[DEBUG] [MAC-CALC] Plain NAS len=%zu, head: ", plain_len);
-	for (size_t i = 0; i < plain_len && i < 16; ++i) printf("%02X", plain_nas[i]);
-	if (plain_len > 16) printf("..");
-	printf("\n");
 
 	// For 5G NAS uplink, the MAC is computed over: [SEQ (1 byte)] || [plain NAS]
 	// where SEQ is the LSB of COUNT.
 	uint8_t seq = (uint8_t)(count & 0xFF);
 	uint8_t mac_input_buf[1 + 1024];
 	if (plain_len > 1024) {
-		printf("[ERROR] Plain NAS too large for MAC input: %zu bytes\n", plain_len);
+		LOG_ERROR("Plain NAS too large for MAC input: %zu bytes\n", plain_len);
 		return -1;
 	}
 	mac_input_buf[0] = seq;
 	memcpy(&mac_input_buf[1], plain_nas, plain_len);
 
-	// Extra visibility to diagnose mismatches with AMF
-	printf("[DEBUG] [MAC-CALC] SEQ=0x%02X, MAC-INPUT(%zu bytes) head: ", seq, plain_len + 1);
-	for (size_t i = 0; i < (plain_len + 1) && i < 24; ++i) {
-		printf("%02X", mac_input_buf[i]);
-	}
-	if (plain_len + 1 > 24) printf("..");
-	printf("\n");
-
 	// Compute MAC using existing security function over [SEQ + plain NAS]
 	int ret = s1n2_nas_compute_mac(alg, key_to_use, count,
 								   bearer, direction, mac_input_buf, plain_len + 1, mac_out);
 
-	if (ret == 0) {
-		printf("[DEBUG] 5G uplink MAC computed: %02X %02X %02X %02X\n",
-		       mac_out[0], mac_out[1], mac_out[2], mac_out[3]);
-	} else {
-		printf("[ERROR] Failed to compute 5G uplink MAC\n");
+	if (ret != 0) {
+		LOG_ERROR("Failed to compute 5G uplink MAC\n");
 	}
 
 	return ret;

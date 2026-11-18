@@ -1,3 +1,5 @@
+#include "gtp_header.h"
+#include "s1n2_log.h"
 /*
  * GTP-U Tunnel Management for s1n2-gateway Protocol Converter
  * Comprehensive S1-U ↔ N3 GTP-U TEID bidirectional mapping
@@ -123,14 +125,14 @@ int gtp_tunnel_init(void) {
     g_teid_manager.cleanup_interval = 300; // 5 minutes
     g_teid_manager.last_cleanup = time(NULL);
 
-    printf("[INFO] Enhanced GTP-U TEID manager initialized (capacity: %d mappings)\n", MAX_TEID_MAPPINGS);
+    LOG_INFO("Enhanced GTP-U TEID manager initialized (capacity: %d mappings)\n", MAX_TEID_MAPPINGS);
     return 0;
 }
 
 // Allocate a mapping from the free pool
 static teid_mapping_enhanced_t *allocate_mapping(void) {
     if (!g_teid_manager.free_mappings) {
-        printf("[ERROR] TEID mapping pool exhausted\n");
+        LOG_ERROR("TEID mapping pool exhausted\n");
         return NULL;
     }
 
@@ -139,14 +141,6 @@ static teid_mapping_enhanced_t *allocate_mapping(void) {
 
     memset(mapping, 0, sizeof(teid_mapping_enhanced_t));
     return mapping;
-}
-
-// Return a mapping to the free pool
-static void free_mapping(teid_mapping_enhanced_t *mapping) {
-    if (!mapping) return;
-
-    mapping->next_s1u = g_teid_manager.free_mappings;
-    g_teid_manager.free_mappings = mapping;
 }
 
 // Add mapping to LRU cache (most recently used at head)
@@ -196,7 +190,7 @@ int gtp_tunnel_add_mapping(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t s1u_port
 
     while (existing) {
         if (existing->s1u_teid == s1u_teid) {
-            printf("[DEBUG] S1-U TEID mapping already exists: 0x%08x -> 0x%08x\n",
+            LOG_DEBUG("S1-U TEID mapping already exists: 0x%08x -> 0x%08x\n",
                    s1u_teid, existing->n3_teid);
             lru_touch(existing);
             existing->last_used = time(NULL);
@@ -208,7 +202,7 @@ int gtp_tunnel_add_mapping(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t s1u_port
     // Allocate new mapping
     teid_mapping_enhanced_t *mapping = allocate_mapping();
     if (!mapping) {
-        printf("[ERROR] Failed to allocate TEID mapping\n");
+        LOG_ERROR("Failed to allocate TEID mapping\n");
         return -1;
     }
 
@@ -243,7 +237,7 @@ int gtp_tunnel_add_mapping(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t s1u_port
     g_teid_manager.total_mappings++;
     g_teid_manager.active_mappings++;
 
-    printf("[INFO] Added bidirectional TEID mapping: S1-U 0x%08x ↔ N3 0x%08x (PDU Session: %d, Bearer: %d, QFI: %d)\n",
+    LOG_INFO("Added bidirectional TEID mapping: S1-U 0x%08x ↔ N3 0x%08x (PDU Session: %d, Bearer: %d, QFI: %d)\n",
            s1u_teid, mapping->n3_teid, pdu_session_id, bearer_id, qfi);
 
     return mapping->n3_teid;
@@ -291,7 +285,7 @@ int gtp_tunnel_add_mapping_explicit(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t
             existing->last_used = time(NULL);
             lru_touch(existing);
 
-            printf("[INFO] Updated TEID mapping (explicit): S1-U 0x%08x ↔ N3 0x%08x (QFI=%u)\n",
+            LOG_INFO("Updated TEID mapping (explicit): S1-U 0x%08x ↔ N3 0x%08x (QFI=%u)\n",
                    s1u_teid, n3_teid, qfi);
             return (int)n3_teid;
         }
@@ -301,7 +295,7 @@ int gtp_tunnel_add_mapping_explicit(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t
     // Allocate new mapping
     teid_mapping_enhanced_t *mapping = allocate_mapping();
     if (!mapping) {
-        printf("[ERROR] Failed to allocate TEID mapping (explicit)\n");
+        LOG_ERROR("Failed to allocate TEID mapping (explicit)\n");
         return -1;
     }
 
@@ -335,7 +329,7 @@ int gtp_tunnel_add_mapping_explicit(uint32_t s1u_teid, uint32_t s1u_ip, uint16_t
     g_teid_manager.total_mappings++;
     g_teid_manager.active_mappings++;
 
-    printf("[INFO] Added explicit TEID mapping: S1-U 0x%08x ↔ N3 0x%08x (PDU Session: %d, Bearer: %d, QFI: %u)\n",
+    LOG_INFO("Added explicit TEID mapping: S1-U 0x%08x ↔ N3 0x%08x (PDU Session: %d, Bearer: %d, QFI: %u)\n",
            s1u_teid, mapping->n3_teid, pdu_session_id, bearer_id, qfi);
 
     return (int)mapping->n3_teid;
@@ -362,7 +356,7 @@ int gtp_tunnel_lookup_s1u_to_n3(uint32_t s1u_teid, uint32_t *n3_teid, uint32_t *
             if (n3_port) *n3_port = mapping->n3_port;
             if (qfi) *qfi = mapping->qfi;
 
-            printf("[DEBUG] S1-U→N3 lookup: 0x%08x -> 0x%08x QFI=%u (hits: %lu)\n",
+            LOG_DEBUG("S1-U→N3 lookup: 0x%08x -> 0x%08x QFI=%u (hits: %lu)\n",
                    s1u_teid, mapping->n3_teid, mapping->qfi, mapping->packet_count_s1u);
             return 0;
         }
@@ -370,7 +364,7 @@ int gtp_tunnel_lookup_s1u_to_n3(uint32_t s1u_teid, uint32_t *n3_teid, uint32_t *
     }
 
     g_teid_manager.cache_misses++;
-    printf("[DEBUG] S1-U→N3 lookup failed: TEID 0x%08x not found\n", s1u_teid);
+    LOG_DEBUG("S1-U→N3 lookup failed: TEID 0x%08x not found\n", s1u_teid);
     return -1;
 }
 
@@ -383,14 +377,14 @@ int gtp_tunnel_update_mapping_qfi(uint32_t s1u_teid, uint8_t qfi) {
         if (mapping->s1u_teid == s1u_teid && mapping->state == TEID_STATE_ACTIVE) {
             uint8_t old_qfi = mapping->qfi;
             mapping->qfi = qfi;
-            printf("[INFO] Updated QFI for S1-U TEID 0x%08x: QFI %u -> %u\n",
+            LOG_INFO("Updated QFI for S1-U TEID 0x%08x: QFI %u -> %u\n",
                    s1u_teid, old_qfi, qfi);
             return 0;
         }
         mapping = mapping->next_s1u;
     }
 
-    printf("[WARN] Cannot update QFI: S1-U TEID 0x%08x not found\n", s1u_teid);
+    LOG_WARN("Cannot update QFI: S1-U TEID 0x%08x not found\n", s1u_teid);
     return -1;
 }
 
@@ -429,38 +423,40 @@ int gtp_tunnel_update_stats(uint32_t teid, bool is_s1u_direction, uint32_t bytes
 void gtp_tunnel_get_stats(void) {
     time_t current_time = time(NULL);
 
-    printf("\n=== Enhanced GTP-U TEID Manager Statistics ===\n");
-    printf("Total mappings created: %u\n", g_teid_manager.total_mappings);
-    printf("Active mappings: %u\n", g_teid_manager.active_mappings);
-    printf("Expired mappings: %u\n", g_teid_manager.expired_mappings);
-    printf("Next N3 TEID: 0x%08x\n", g_teid_manager.next_n3_teid);
-    printf("\nLookup Statistics:\n");
-    printf("S1-U lookups: %lu\n", g_teid_manager.lookup_count_s1u);
-    printf("N3 lookups: %lu\n", g_teid_manager.lookup_count_n3);
-    printf("Cache hits: %lu\n", g_teid_manager.cache_hits);
-    printf("Cache misses: %lu\n", g_teid_manager.cache_misses);
+    LOG_INFO("\n=== Enhanced GTP-U TEID Manager Statistics ===\n");
+    LOG_INFO("Total mappings created: %u\n", g_teid_manager.total_mappings);
+    LOG_INFO("Active mappings: %u\n", g_teid_manager.active_mappings);
+    LOG_INFO("Expired mappings: %u\n", g_teid_manager.expired_mappings);
+    LOG_INFO("Next N3 TEID: 0x%08x\n", g_teid_manager.next_n3_teid);
+    LOG_INFO("\nLookup Statistics:\n");
+    LOG_INFO("S1-U lookups: %lu\n", g_teid_manager.lookup_count_s1u);
+    LOG_INFO("N3 lookups: %lu\n", g_teid_manager.lookup_count_n3);
+    LOG_INFO("Cache hits: %lu\n", g_teid_manager.cache_hits);
+    LOG_INFO("Cache misses: %lu\n", g_teid_manager.cache_misses);
 
     if (g_teid_manager.lookup_count_s1u + g_teid_manager.lookup_count_n3 > 0) {
         double hit_rate = (double)g_teid_manager.cache_hits /
                          (g_teid_manager.cache_hits + g_teid_manager.cache_misses) * 100.0;
-        printf("Cache hit rate: %.2f%%\n", hit_rate);
+        LOG_INFO("Cache hit rate: %.2f%%\n", hit_rate);
     }
 
-    printf("Last cleanup: %ld seconds ago\n", current_time - g_teid_manager.last_cleanup);
-    printf("Memory pool utilization: %u/%d (%.1f%%)\n",
+    LOG_INFO("Last cleanup: %ld seconds ago\n", current_time - g_teid_manager.last_cleanup);
+    LOG_INFO("Memory pool utilization: %u/%d (%.1f%%)\n",
            g_teid_manager.total_mappings, MAX_TEID_MAPPINGS,
            (double)g_teid_manager.total_mappings / MAX_TEID_MAPPINGS * 100.0);
-    printf("================================================\n\n");
+
 }
 
 // Enhanced GTP-U packet processing with bidirectional TEID conversion
 int gtp_tunnel_process_s1u_to_n3(uint8_t *packet, size_t packet_len, uint8_t **output_packet, size_t *output_len) {
-    if (!packet || packet_len < 12 || !output_packet || !output_len) {
+    if (!packet || packet_len < 8 || !output_packet || !output_len) {
         return -1;
     }
 
     // Extract S1-U TEID from GTP-U header (offset 4-7)
-    uint32_t s1u_teid = ntohl(*(uint32_t*)(packet + 4));
+    uint32_t s1u_teid;
+    memcpy(&s1u_teid, packet + 4, sizeof(s1u_teid));
+    s1u_teid = ntohl(s1u_teid);
 
     // Lookup N3 mapping
     uint32_t n3_teid, n3_ip;
@@ -468,7 +464,7 @@ int gtp_tunnel_process_s1u_to_n3(uint8_t *packet, size_t packet_len, uint8_t **o
 
     uint8_t qfi = 0;
     if (gtp_tunnel_lookup_s1u_to_n3(s1u_teid, &n3_teid, &n3_ip, &n3_port, &qfi) != 0) {
-        printf("[WARNING] S1-U to N3 TEID mapping not found: 0x%08x\n", s1u_teid);
+        LOG_WARN("S1-U to N3 TEID mapping not found: 0x%08x\n", s1u_teid);
         return -1;
     }
 
@@ -488,17 +484,10 @@ int gtp_tunnel_process_s1u_to_n3(uint8_t *packet, size_t packet_len, uint8_t **o
     //   Next Extension Header Type = 0x00
     // ================================================================
 
-    // Determine where the GTP-U basic header ends (and T-PDU payload begins)
     uint8_t flags = packet[0];
-    size_t orig_hdr_len = 8; // Basic GTP-U header
-    if (flags & 0x07) {
-        // If any of E/S/PN bits set, optional fields present
-        orig_hdr_len = 12;
-    }
-    if (packet_len < orig_hdr_len) {
-        printf("[WARNING] Packet too short for GTP-U header: %zu < %zu\n", packet_len, orig_hdr_len);
-        return -1;
-    }
+    size_t orig_hdr_len;
+    if (s1n2_gtpu_payload_offset(packet, packet_len, &orig_hdr_len) != 0 ||
+        packet[1] != 0xff || packet_len - orig_hdr_len > UINT16_MAX - 8) return -1;
 
     // Output: new header (12 bytes) + PDU Session Container (4 bytes) + original T-PDU payload
     size_t payload_len = packet_len - orig_hdr_len;
@@ -517,10 +506,12 @@ int gtp_tunnel_process_s1u_to_n3(uint8_t *packet, size_t packet_len, uint8_t **o
 
     // Length = payload + 4 (optional fields seq/npdu/next_ext) + 4 (extension header)
     uint16_t new_gtp_length = (uint16_t)(payload_len + 8);
-    *(uint16_t*)(out + 2) = htons(new_gtp_length);
+    uint16_t length_be = htons(new_gtp_length);
+    memcpy(out + 2, &length_be, sizeof(length_be));
 
     // N3 TEID
-    *(uint32_t*)(out + 4) = htonl(n3_teid);
+    uint32_t teid_be = htonl(n3_teid);
+    memcpy(out + 4, &teid_be, sizeof(teid_be));
 
     // Optional fields (when E flag is set)
     out[8]  = 0x00;  // Sequence Number MSB
@@ -547,14 +538,14 @@ int gtp_tunnel_process_s1u_to_n3(uint8_t *packet, size_t packet_len, uint8_t **o
     // Update statistics
     gtp_tunnel_update_stats(s1u_teid, true, new_packet_len);
 
-    printf("[DEBUG] S1-U→N3 GTP-U conversion: TEID 0x%08x -> 0x%08x QFI=%u (%zu→%zu bytes)\n",
+    LOG_DEBUG("S1-U→N3 GTP-U conversion: TEID 0x%08x -> 0x%08x QFI=%u (%zu→%zu bytes)\n",
            s1u_teid, n3_teid, qfi, packet_len, new_packet_len);
 
     return 0;
 }
 
 int gtp_tunnel_process_n3_to_s1u(uint8_t *packet, size_t packet_len, uint8_t **output_packet, size_t *output_len) {
-    if (!packet || packet_len < 12 || !output_packet || !output_len) {
+    if (!packet || packet_len < 8 || !output_packet || !output_len) {
         return -1;
     }
 
@@ -584,12 +575,16 @@ int gtp_tunnel_process_n3_to_s1u(uint8_t *packet, size_t packet_len, uint8_t **o
     // ============================================================================
 
     // Extract N3 TEID for logging
-    uint32_t n3_teid = ntohl(*(uint32_t*)(packet + 4));
+    uint32_t n3_teid;
+    size_t payload_offset;
+    if (s1n2_gtpu_payload_offset(packet, packet_len, &payload_offset) != 0 || packet[1] != 0xff) return -1;
+    memcpy(&n3_teid, packet + 4, sizeof(n3_teid));
+    n3_teid = ntohl(n3_teid);
 
     // Forward packet as-is without TEID translation
     *output_packet = malloc(packet_len);
     if (!*output_packet) {
-        printf("[ERROR] Memory allocation failed for downlink transparent proxy\n");
+        LOG_ERROR("Memory allocation failed for downlink transparent proxy\n");
         return -1;
     }
 
@@ -599,7 +594,7 @@ int gtp_tunnel_process_n3_to_s1u(uint8_t *packet, size_t packet_len, uint8_t **o
     // Update statistics (using received TEID)
     gtp_tunnel_update_stats(n3_teid, false, packet_len);
 
-    printf("[INFO] Downlink N3→S1-U: Transparent proxy (no TEID translation), TEID 0x%08x (%zu bytes)\n",
+    LOG_INFO("Downlink N3→S1-U: Transparent proxy (no TEID translation), TEID 0x%08x (%zu bytes)\n",
            n3_teid, packet_len);
 
     return 0;
@@ -622,7 +617,7 @@ void gtp_tunnel_cleanup(void) {
     int i;
     teid_mapping_enhanced_t *mapping, *temp;
 
-    printf("[GTP-U] Starting complete cleanup...\n");
+    LOG_INFO("[GTP-U] Starting complete cleanup...\n");
 
     // Clear all hash table entries
     for (i = 0; i < TEID_HASH_SIZE; i++) {
@@ -656,5 +651,5 @@ void gtp_tunnel_cleanup(void) {
     g_teid_manager.mapping_pool[MAX_TEID_MAPPINGS - 1].next_s1u = NULL;
     g_teid_manager.free_mappings = &g_teid_manager.mapping_pool[0];
 
-    printf("[GTP-U] Complete cleanup finished - all resources reset\n");
+    LOG_INFO("[GTP-U] Complete cleanup finished - all resources reset\n");
 }

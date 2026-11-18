@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /*
  * s1n2_ics.c – Initial Context Setup response conversion
  */
@@ -7,7 +8,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
                                                uint8_t *ngap_data, size_t *ngap_len,
                                                s1n2_context_t *ctx) {
     if (!s1ap_data || !ngap_data || !ngap_len || *ngap_len == 0) {
-        printf("[ERROR] Invalid parameters for InitialContextSetupResponse conversion\n");
+        LOG_ERROR("Invalid parameters for InitialContextSetupResponse conversion\n");
         return -1;
     }
 
@@ -16,7 +17,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
     asn_dec_rval_t dr = aper_decode_complete(NULL, &asn_DEF_S1AP_S1AP_PDU, (void**)&s1ap_pdu, s1ap_data, s1ap_len);
 
     if (dr.code != RC_OK || !s1ap_pdu) {
-        printf("[ERROR] Failed to decode S1AP InitialContextSetupResponse\n");
+        LOG_ERROR("Failed to decode S1AP InitialContextSetupResponse\n");
         if (s1ap_pdu) ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, s1ap_pdu);
         return -1;
     }
@@ -25,7 +26,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
     if (s1ap_pdu->present != S1AP_S1AP_PDU_PR_successfulOutcome ||
         !s1ap_pdu->choice.successfulOutcome ||
         s1ap_pdu->choice.successfulOutcome->procedureCode != S1AP_ProcedureCode_id_InitialContextSetup) {
-        printf("[ERROR] Not a valid S1AP InitialContextSetupResponse\n");
+        LOG_ERROR("Not a valid S1AP InitialContextSetupResponse\n");
         ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, s1ap_pdu);
         return -1;
     }
@@ -46,19 +47,19 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
         case S1AP_ProtocolIE_ID_id_MME_UE_S1AP_ID:
             if (ie->value.present == S1AP_InitialContextSetupResponseIEs__value_PR_MME_UE_S1AP_ID) {
                 mme_ue_s1ap_id = ie->value.choice.MME_UE_S1AP_ID;
-                printf("[DEBUG] S1AP ICS Response: MME_UE_S1AP_ID=%ld\n", mme_ue_s1ap_id);
+                LOG_DEBUG("S1AP ICS Response: MME_UE_S1AP_ID=%ld\n", mme_ue_s1ap_id);
             }
             break;
         case S1AP_ProtocolIE_ID_id_eNB_UE_S1AP_ID:
             if (ie->value.present == S1AP_InitialContextSetupResponseIEs__value_PR_ENB_UE_S1AP_ID) {
                 enb_ue_s1ap_id = ie->value.choice.ENB_UE_S1AP_ID;
-                printf("[DEBUG] S1AP ICS Response: ENB_UE_S1AP_ID=%ld\n", enb_ue_s1ap_id);
+                LOG_DEBUG("S1AP ICS Response: ENB_UE_S1AP_ID=%ld\n", enb_ue_s1ap_id);
             }
             break;
         case S1AP_ProtocolIE_ID_id_E_RABSetupListCtxtSURes:
             if (ie->value.present == S1AP_InitialContextSetupResponseIEs__value_PR_E_RABSetupListCtxtSURes) {
                 erab_setup_list = &ie->value.choice.E_RABSetupListCtxtSURes;
-                printf("[DEBUG] S1AP ICS Response: E-RAB Setup List with %d items\n",
+                LOG_DEBUG("S1AP ICS Response: E-RAB Setup List with %d items\n",
                        erab_setup_list->list.count);
             }
             break;
@@ -68,7 +69,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
     }
 
     if (mme_ue_s1ap_id == -1 || enb_ue_s1ap_id == -1) {
-        printf("[ERROR] Missing required IEs in S1AP InitialContextSetupResponse\n");
+        LOG_ERROR("Missing required IEs in S1AP InitialContextSetupResponse\n");
         ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, s1ap_pdu);
         return -1;
     }
@@ -117,7 +118,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
     // This enables UPF to send downlink GTP-U packets to s1n2
     // If E-RAB setup list exists, build minimal PDUSessionResourceSetupListCxtRes
     if (erab_setup_list && erab_setup_list->list.count > 0) {
-        printf("[INFO] E-RAB Setup List present with %d items (building PDUSessionResourceSetupListCxtRes)\n",
+        LOG_INFO("E-RAB Setup List present with %d items (building PDUSessionResourceSetupListCxtRes)\n",
                erab_setup_list->list.count);
 
         NGAP_InitialContextSetupResponseIEs_t *ie_ps_list = calloc(1, sizeof(NGAP_InitialContextSetupResponseIEs_t));
@@ -162,7 +163,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
                         ue_map_for_teid->upf_n3_teid, ue_map_for_teid->upf_n3_ip,
                         (uint8_t)pdu_session_id, (uint16_t)rab_item->e_RAB_ID);
                 } else {
-                    printf("[WARN] [TEID-MAP] Cannot register mapping: UPF N3 info not available (ENB-UE-ID=%ld)\n", enb_ue_s1ap_id);
+                    LOG_WARN("[TEID-MAP] Cannot register mapping: UPF N3 info not available (ENB-UE-ID=%ld)\n", enb_ue_s1ap_id);
                 }
             }
 
@@ -219,12 +220,12 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
                 inet_ntop(AF_INET, &report_ip_be, s1n2_ip_str, sizeof(s1n2_ip_str));
                 inet_ntop(AF_INET, &enb_ip_be, enb_ip_str, sizeof(enb_ip_str));
 
-                printf("[INFO] TRANSPARENT PROXY: Reporting uplink tunnel to AMF:\n");
-                printf("[INFO]   - IP: %s (s1n2 S1-U interface, will proxy to eNB %s)\n", s1n2_ip_str, enb_ip_str);
-                printf("[INFO]   - TEID: 0x%08x (eNB's uplink TEID)\n", ntohl(report_teid_be));
-                printf("[INFO]   - Rationale: UPF sends downlink to s1n2, s1n2 forwards to eNB\n");
+                LOG_INFO("TRANSPARENT PROXY: Reporting uplink tunnel to AMF:\n");
+                LOG_INFO("  - IP: %s (s1n2 S1-U interface, will proxy to eNB %s)\n", s1n2_ip_str, enb_ip_str);
+                LOG_INFO("  - TEID: 0x%08x (eNB's uplink TEID)\n", ntohl(report_teid_be));
+                LOG_INFO("  - Rationale: UPF sends downlink to s1n2, s1n2 forwards to eNB\n");
             } else {
-                printf("[WARN] No context provided, using eNB IP/TEID directly\n");
+                LOG_WARN("No context provided, using eNB IP/TEID directly\n");
             }
 
             memcpy(gtp->transportLayerAddress.buf, &report_ip_be, 4);
@@ -247,13 +248,13 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
                 ue_id_mapping_t *ue_map_for_qfi = s1n2_context_find_recent_security(ctx);
                 if (ue_map_for_qfi && ue_map_for_qfi->qfi > 0) {
                     qfi = ue_map_for_qfi->qfi;
-                    printf("[DEBUG] Using QFI=%ld from UE mapping context (ENB=%ld)\n",
+                    LOG_DEBUG("Using QFI=%ld from UE mapping context (ENB=%ld)\n",
                            qfi, ue_map_for_qfi->enb_ue_s1ap_id);
                 } else {
-                    printf("[DEBUG] Using default QFI=%ld (no cached QFI in UE context)\n", qfi);
+                    LOG_DEBUG("Using default QFI=%ld (no cached QFI in UE context)\n", qfi);
                 }
             } else {
-                printf("[WARN] No context provided, using default QFI=%ld\n", qfi);
+                LOG_WARN("No context provided, using default QFI=%ld\n", qfi);
             }
 
             // associatedQosFlowList: add QFI
@@ -268,14 +269,14 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
             qfi_item->qosFlowIdentifier = qfi;
             ASN_SEQUENCE_ADD(&transfer.dLQosFlowPerTNLInformation.associatedQosFlowList.list, qfi_item);
 
-            printf("[DEBUG] Added QoS Flow to associatedQosFlowList: QFI=%ld\n", qfi);
+            LOG_DEBUG("Added QoS Flow to associatedQosFlowList: QFI=%ld\n", qfi);
 
             // Encode transfer as APER and wrap into OCTET STRING
             void *xfer_buf = NULL;
             ssize_t xfer_bytes = aper_encode_to_new_buffer(&asn_DEF_NGAP_PDUSessionResourceSetupResponseTransfer, NULL,
                                                            &transfer, &xfer_buf);
             if (xfer_bytes <= 0 || !xfer_buf) {
-                printf("[ERROR] Failed to encode PDUSessionResourceSetupResponseTransfer\n");
+                LOG_ERROR("Failed to encode PDUSessionResourceSetupResponseTransfer\n");
                 // Free allocated substructures
                 ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_PDUSessionResourceSetupResponseTransfer, &transfer);
                 ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_PDUSessionResourceSetupItemCxtRes, ps_item);
@@ -287,7 +288,7 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
 
             if (OCTET_STRING_fromBuf(&ps_item->pDUSessionResourceSetupResponseTransfer,
                                      (const char *)xfer_buf, (size_t)xfer_bytes) != 0) {
-                printf("[ERROR] Failed to set OCTET STRING for PDUSessionResourceSetupResponseTransfer\n");
+                LOG_ERROR("Failed to set OCTET STRING for PDUSessionResourceSetupResponseTransfer\n");
                 free(xfer_buf);
                 ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_PDUSessionResourceSetupResponseTransfer, &transfer);
                 ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_PDUSessionResourceSetupItemCxtRes, ps_item);
@@ -311,25 +312,25 @@ int s1n2_convert_initial_context_setup_response(uint8_t *s1ap_data, size_t s1ap_
 
     // Encode NGAP PDU
     if (asn_check_constraints(&asn_DEF_NGAP_NGAP_PDU, ngap_pdu, NULL, NULL) != 0) {
-        printf("[ERROR] NGAP InitialContextSetupResponse constraint check failed\n");
+        LOG_ERROR("NGAP InitialContextSetupResponse constraint check failed\n");
         goto fail;
     }
 
     asn_enc_rval_t er = aper_encode_to_buffer(&asn_DEF_NGAP_NGAP_PDU, NULL, ngap_pdu, ngap_data, *ngap_len);
     if (er.encoded == -1) {
-        printf("[ERROR] Failed to encode NGAP InitialContextSetupResponse\n");
+        LOG_ERROR("Failed to encode NGAP InitialContextSetupResponse\n");
         goto fail;
     }
 
     size_t bytes = (er.encoded + 7) / 8;
     if (bytes > *ngap_len) {
-        printf("[ERROR] NGAP InitialContextSetupResponse too large for buffer\n");
+        LOG_ERROR("NGAP InitialContextSetupResponse too large for buffer\n");
         goto fail;
     }
     *ngap_len = bytes;
 
-    printf("[INFO] Converted S1AP InitialContextSetupResponse -> NGAP (%zu bytes)\n", bytes);
-    printf("[INFO] IDs: MME/AMF=%ld, ENB/RAN=%ld, E-RABs=%d\n",
+    LOG_INFO("Converted S1AP InitialContextSetupResponse -> NGAP (%zu bytes)\n", bytes);
+    LOG_INFO("IDs: MME/AMF=%ld, ENB/RAN=%ld, E-RABs=%d\n",
            mme_ue_s1ap_id, enb_ue_s1ap_id,
            erab_setup_list ? erab_setup_list->list.count : 0);
 

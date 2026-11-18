@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file ue_context_release.c
  * @brief NGAP UEContextReleaseRequest builder + S1AP handler
@@ -150,11 +151,11 @@ int s1n2_handle_s1ap_ue_context_release(s1n2_context_t *ctx, void *raw_msg) {
     s1n2_copy_s1ap_cause_to_ngap(s1ap_cause, &ngap_cause);
     long s1ap_cause_value = s1n2_get_s1ap_cause_value(s1ap_cause);
 
-    printf("[INFO] Detected S1AP UEContextReleaseRequest (ENB=%ld, MME=%ld)\n", enb_id, mme_id);
-    printf("[INFO] [BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
+    LOG_INFO("Detected S1AP UEContextReleaseRequest (ENB=%ld, MME=%ld)\n", enb_id, mme_id);
+    LOG_INFO("[BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
            ran_ue_ngap_id, amf_ue_ngap_id, map ? "hit" : "miss");
-    printf("[INFO] [BRIDGE] Cause present=%d value=%ld\n",
-           s1ap_cause ? s1ap_cause->present : -1, s1ap_cause_value);
+    LOG_INFO("[BRIDGE] Cause present=%d value=%ld\n",
+           s1ap_cause ? (int)s1ap_cause->present : -1, s1ap_cause_value);
 
     uint8_t ngap_buf[512];
     size_t ngap_len = sizeof(ngap_buf);
@@ -168,16 +169,16 @@ int s1n2_handle_s1ap_ue_context_release(s1n2_context_t *ctx, void *raw_msg) {
             ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_buf, ngap_len,
                                         NULL, 0, htonl(60), 0, 0, 0, 0);
             if (sent == (ssize_t)ngap_len) {
-                printf("[INFO] [BRIDGE] UEContextReleaseRequest forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
+                LOG_INFO("[BRIDGE] UEContextReleaseRequest forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
             } else {
-                printf("[ERROR] Failed to forward UEContextReleaseRequest to NGAP (ret=%zd, errno=%d)\n",
+                LOG_ERROR("Failed to forward UEContextReleaseRequest to NGAP (ret=%zd, errno=%d)\n",
                        sent, errno);
             }
         } else {
-            printf("[WARN] Cannot forward UEContextReleaseRequest: N2 socket unavailable\n");
+            LOG_WARN("Cannot forward UEContextReleaseRequest: N2 socket unavailable\n");
         }
     } else {
-        printf("[ERROR] Failed to build NGAP UEContextReleaseRequest\n");
+        LOG_ERROR("Failed to build NGAP UEContextReleaseRequest\n");
     }
 
     /* Reset ICS state for this UE */
@@ -186,9 +187,8 @@ int s1n2_handle_s1ap_ue_context_release(s1n2_context_t *ctx, void *raw_msg) {
         map->ics_completed = false;
         map->ics_failed = false;
         map->ics_e_rab_id = 0;
-        printf("[INFO] [ICS] Reset ICS state due to UEContextRelease (ENB=%ld)\n", map->enb_ue_s1ap_id);
+        LOG_INFO("[ICS] Reset ICS state due to UEContextRelease (ENB=%ld)\n", map->enb_ue_s1ap_id);
     }
 
-    fflush(stdout);
     return 0;
 }

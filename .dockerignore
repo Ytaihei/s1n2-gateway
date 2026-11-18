@@ -1,4 +1,32 @@
+# Build outputs and downloaded dependencies
 build/
+open5gs/
+open5gs_lib/
+
+# Deployment configuration and local-only files
+.env
+config/auth_keys.yaml
+.local-protected/
+start.sh
+scripts/protect_local_configs.sh
+docs/
 *.pcap
+*.pcapng
+
+# Repository metadata and editor files
 .git
 .gitignore
+.github/
+s1n2-gateway.wiki/
+.vscode/
+*.code-workspace
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Isolated synthetic integration lab outputs
+lab/runtime/
+lab/sources/
+__pycache__/
+lab/runtime-history/

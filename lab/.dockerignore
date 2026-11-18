@@ -1,0 +1,6 @@
+runtime/
+__pycache__/
+sources/**/.git
+sources/**/build
+sources/gateway-deps/
+runtime-history/

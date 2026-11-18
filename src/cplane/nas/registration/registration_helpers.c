@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file registration/registration_helpers.c
  * @brief Identity helper functions for Registration / Attach module
@@ -104,7 +105,7 @@ int s1n2_extract_imsi_from_5g_registration_request(const uint8_t *nas_pdu, size_
 	}
 
 	if (nas_pdu[0] != 0x7E || nas_pdu[2] != 0x41) {
-		printf("[DEBUG] Not a 5G Registration Request (EPD=0x%02X, Type=0x%02X)\n",
+		LOG_DEBUG("Not a 5G Registration Request (EPD=0x%02X, Type=0x%02X)\n",
 			   nas_pdu[0], nas_len > 2 ? nas_pdu[2] : 0);
 		return -1;
 	}
@@ -112,7 +113,7 @@ int s1n2_extract_imsi_from_5g_registration_request(const uint8_t *nas_pdu, size_
 	size_t offset = 4;
 
 	if (offset + 2 > nas_len) {
-		printf("[DEBUG] NAS-PDU too short for Mobile Identity\n");
+		LOG_DEBUG("NAS-PDU too short for Mobile Identity\n");
 		return -1;
 	}
 
@@ -120,7 +121,7 @@ int s1n2_extract_imsi_from_5g_registration_request(const uint8_t *nas_pdu, size_
 	offset += 2;
 
 	if (offset + identity_len > nas_len) {
-		printf("[DEBUG] Mobile Identity length mismatch (len=%u, available=%zu)\n",
+		LOG_DEBUG("Mobile Identity length mismatch (len=%u, available=%zu)\n",
 			   identity_len, nas_len - offset);
 		return -1;
 	}
@@ -130,20 +131,20 @@ int s1n2_extract_imsi_from_5g_registration_request(const uint8_t *nas_pdu, size_
 	uint8_t identity_type = nas_pdu[offset] & 0x07;
 
 	if (identity_type != 0x01) {
-		printf("[DEBUG] Mobile Identity is not SUCI (type=%u)\n", identity_type);
+
 		return -1;
 	}
 
 	uint8_t supi_format = (nas_pdu[offset] >> 4) & 0x07;
 	if (supi_format != 0x00) {
-		printf("[DEBUG] SUPI format is not IMSI (format=%u)\n", supi_format);
+
 		return -1;
 	}
 
 	offset++;
 
 	if (offset + 3 > nas_len) {
-		printf("[DEBUG] PLMN truncated\n");
+		LOG_DEBUG("PLMN truncated\n");
 		return -1;
 	}
 
@@ -188,11 +189,10 @@ int s1n2_extract_imsi_from_5g_registration_request(const uint8_t *nas_pdu, size_
 	if (imsi_pos >= 10) {
 		strncpy(imsi_out, imsi_str, imsi_len - 1);
 		imsi_out[imsi_len - 1] = '\0';
-		printf("[INFO] Successfully extracted IMSI: %s\n", imsi_out);
+
 		return 0;
 	}
 
-	printf("[DEBUG] Extracted IMSI too short (len=%d): %s\n", imsi_pos, imsi_str);
 	return -1;
 }
 
@@ -232,7 +232,7 @@ void s1n2_cache_registration_accept_artifacts(ue_id_mapping_t *ue_map,
 		uint16_t guti_len = ((uint16_t)msg[i + 1] << 8) | msg[i + 2];
 		size_t value_pos = i + 3;
 		if (value_pos + guti_len > msg_len) {
-			printf("[WARN] 5G-GUTI IE length exceeds NAS payload (len=%u, remain=%zu)\n",
+			LOG_WARN("5G-GUTI IE length exceeds NAS payload (len=%u, remain=%zu)\n",
 				       guti_len, msg_len - value_pos);
 			break;
 		}
@@ -258,24 +258,24 @@ void cache_ue_security_capability(ue_id_mapping_t *ue_map,
 
 		uint8_t len = nas_4g[i + 1];
 		if (len == 0) {
-			printf("[WARN] UE security capability IE length is zero (offset=%zu)\n", i);
+			LOG_WARN("UE security capability IE length is zero (offset=%zu)\n", i);
 			break;
 		}
 		size_t value_pos = i + 2;
 		if (value_pos + len > nas_4g_len) {
-			printf("[WARN] UE security capability IE truncated (len=%u, offset=%zu, nas_len=%zu)\n",
+			LOG_WARN("UE security capability IE truncated (len=%u, offset=%zu, nas_len=%zu)\n",
 			       len, i, nas_4g_len);
 			break;
 		}
 		size_t copy = len;
 		if (copy > S1N2_MAX_UE_SECURITY_CAP_LEN) {
-			printf("[WARN] UE security capability length %u exceeds cache limit %d, truncating\n",
+			LOG_WARN("UE security capability length %u exceeds cache limit %d, truncating\n",
 			       len, S1N2_MAX_UE_SECURITY_CAP_LEN);
 			copy = S1N2_MAX_UE_SECURITY_CAP_LEN;
 		}
 		memcpy(cached_cap, nas_4g + value_pos, copy);
 		cached_cap_len = (uint8_t)copy;
-		printf("[DEBUG] Found UE security capability IE (raw_len=%u, stored_len=%zu)\n", len, copy);
+		LOG_DEBUG("Found UE security capability IE (raw_len=%u, stored_len=%zu)\n", len, copy);
 		break;
 	}
 
@@ -290,6 +290,6 @@ void cache_ue_security_capability(ue_id_mapping_t *ue_map,
 		ue_map->cached_ue_security_cap_len = (uint8_t)store_len;
 		ue_map->has_cached_ue_security_cap = true;
 		ue_map->last_update = time(NULL);
-		printf("[INFO] Cached UE security capability for UE mapping (len=%zu)\n", store_len);
+		LOG_INFO("Cached UE security capability for UE mapping (len=%zu)\n", store_len);
 	}
 }

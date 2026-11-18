@@ -1,3 +1,7 @@
+#include "registration/registration.h"
+#include "registration/registration_bridge.h"
+#include "security/security.h"
+#include "s1n2_log.h"
 /**
  * @file ics_request.c
  * @brief NGAP InitialContextSetupRequest handler
@@ -55,22 +59,22 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
     if (!ctx || !init) return -1;
 
     NGAP_InitialContextSetupRequest_t *ics = &init->value.choice.InitialContextSetupRequest;
-    printf("[DEBUG] NGAP InitialContextSetupRequest detected (proc=%ld) - IE count: %ld\n",
+    LOG_DEBUG("NGAP InitialContextSetupRequest detected (proc=%ld) - IE count: %ld\n",
            (long)init->procedureCode, ics ? ics->protocolIEs.list.count : -1L);
-    fflush(stdout);
 
     long amf_ue_id = -1;
     long ran_ue_id = -1;
     int pdu_sess_count = 0;
     int nas_pdu_len = 0;
     const uint8_t *nas_ptr = NULL;
+    const NGAP_NAS_PDU_t *session_nas = NULL;
 
     if (ics) {
-        printf("[DEBUG] NGAP ICS: Entering IE loop (count=%d)\n", ics->protocolIEs.list.count);
+        LOG_DEBUG("NGAP ICS: Entering IE loop (count=%d)\n", ics->protocolIEs.list.count);
         for (int i = 0; i < ics->protocolIEs.list.count; i++) {
             NGAP_InitialContextSetupRequestIEs_t *ie = ics->protocolIEs.list.array[i];
             if (!ie) continue;
-            printf("[DEBUG]  NGAP ICS IE[%d]: ID=%ld, present=%d\n", i, ie->id, ie->value.present);
+            LOG_DEBUG(" NGAP ICS IE[%d]: ID=%ld, present=%d\n", i, ie->id, ie->value.present);
             switch (ie->id) {
                 case NGAP_ProtocolIE_ID_id_AMF_UE_NGAP_ID:
                     if (ie->value.present == NGAP_InitialContextSetupRequestIEs__value_PR_AMF_UE_NGAP_ID) {
@@ -78,7 +82,7 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                         if (asn_INTEGER2long(&ie->value.choice.AMF_UE_NGAP_ID, &tmp) == 0) {
                             amf_ue_id = tmp;
                         } else {
-                            printf("[WARN]  NGAP ICS: Failed to decode AMF_UE_NGAP_ID\n");
+                            LOG_WARN(" NGAP ICS: Failed to decode AMF_UE_NGAP_ID\n");
                         }
                     }
                     break;
@@ -91,13 +95,14 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                     if (ie->value.present == NGAP_InitialContextSetupRequestIEs__value_PR_PDUSessionResourceSetupListCxtReq) {
                         NGAP_PDUSessionResourceSetupListCxtReq_t *lst = &ie->value.choice.PDUSessionResourceSetupListCxtReq;
                         pdu_sess_count = lst->list.count;
-                        printf("[DEBUG]  NGAP ICS: PDUSessionResourceSetupListCxtReq count=%d\n", pdu_sess_count);
+                        LOG_DEBUG(" NGAP ICS: PDUSessionResourceSetupListCxtReq count=%d\n", pdu_sess_count);
                         for (int j = 0; j < lst->list.count; j++) {
                             struct NGAP_PDUSessionResourceSetupItemCxtReq *item = lst->list.array[j];
                             if (!item) continue;
+                            if (item->nAS_PDU) session_nas = item->nAS_PDU;
                             int sid = (int)item->pDUSessionID;
                             int xfer_len = (int)item->pDUSessionResourceSetupRequestTransfer.size;
-                            printf("[DEBUG]   - PDU Session ID=%d, Transfer size=%d bytes\n", sid, xfer_len);
+                            LOG_DEBUG("  - PDU Session ID=%d, Transfer size=%d bytes\n", sid, xfer_len);
 
                             // Decode PDUSessionResourceSetupRequestTransfer to extract UPF N3 tunnel info
                             NGAP_PDUSessionResourceSetupRequestTransfer_t *transfer = NULL;
@@ -108,7 +113,7 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                                 item->pDUSessionResourceSetupRequestTransfer.size);
 
                             if (dec_ret.code == RC_OK && transfer) {
-                                printf("[DEBUG]     Decoded PDUSessionResourceSetupRequestTransfer successfully\n");
+                                LOG_DEBUG("    Decoded PDUSessionResourceSetupRequestTransfer successfully\n");
 
                                 // Extract UL-NGU-UP-TNLInformation (UPF's downlink tunnel to s1n2)
                                 for (int t = 0; t < transfer->protocolIEs.list.count; t++) {
@@ -134,7 +139,7 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                                                 memcpy(&upf_dl_teid_be, gtp_tunnel->gTP_TEID.buf, 4);
                                             }
 
-                                            printf("[INFO]     UPF N3 Downlink Tunnel: IP=%s, TEID=0x%08x\n",
+                                            LOG_INFO("    UPF N3 Downlink Tunnel: IP=%s, TEID=0x%08x\n",
                                                    inet_ntoa(*(struct in_addr*)&upf_ip_be), ntohl(upf_dl_teid_be));
 
                                             // Store UPF N3 tunnel info in the UE mapping context
@@ -159,13 +164,13 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                                         xfer_ie->value.present == NGAP_PDUSessionResourceSetupRequestTransferIEs__value_PR_QosFlowSetupRequestList) {
 
                                         NGAP_QosFlowSetupRequestList_t *qos_list = &xfer_ie->value.choice.QosFlowSetupRequestList;
-                                        printf("[DEBUG]     QosFlowSetupRequestList count=%d\n", qos_list->list.count);
+                                        LOG_DEBUG("    QosFlowSetupRequestList count=%d\n", qos_list->list.count);
 
                                         // Extract first QFI (typically only one QoS flow for data)
                                         if (qos_list->list.count > 0 && qos_list->list.array[0]) {
                                             NGAP_QosFlowSetupRequestItem_t *qos_item = qos_list->list.array[0];
                                             long extracted_qfi = qos_item->qosFlowIdentifier;
-                                            printf("[INFO]     Extracted QFI=%ld from QosFlowSetupRequestList\n", extracted_qfi);
+                                            LOG_INFO("    Extracted QFI=%ld from QosFlowSetupRequestList\n", extracted_qfi);
 
                                             // Store QFI in UE mapping context
                                             ue_id_mapping_t *ue_map = s1n2_context_find_recent_security(ctx);
@@ -179,7 +184,7 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                                             }
                                             if (ue_map) {
                                                 ue_map->qfi = (uint8_t)extracted_qfi;
-                                                printf("[INFO]     Stored QFI=%d in UE context (ENB=%ld)\n",
+                                                LOG_INFO("    Stored QFI=%d in UE context (ENB=%ld)\n",
                                                        ue_map->qfi, ue_map->enb_ue_s1ap_id);
 
                                                 // Update QFI in existing TEID mappings that were created before QFI was known
@@ -196,14 +201,9 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
 
                                 ASN_STRUCT_FREE(asn_DEF_NGAP_PDUSessionResourceSetupRequestTransfer, transfer);
                             } else {
-                                printf("[WARN]     Failed to decode PDUSessionResourceSetupRequestTransfer (code=%d)\n", dec_ret.code);
-                                int dump = xfer_len < 16 ? xfer_len : 16;
-                                printf("[DEBUG]     Transfer[0..%d): ", dump);
-                                for (int k = 0; k < dump; k++) {
-                                    printf("%02X ", item->pDUSessionResourceSetupRequestTransfer.buf[k]);
-                                }
-                                if (xfer_len > dump) printf("...");
-                                printf("\n");
+                                LOG_WARN("    Failed to decode PDUSessionResourceSetupRequestTransfer (code=%d)\n", dec_ret.code);
+
+
                             }
                         }
                     }
@@ -213,14 +213,9 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                         OCTET_STRING_t *nas = &ie->value.choice.NAS_PDU;
                         nas_pdu_len = nas->size;
                         nas_ptr = nas->buf;
-                        printf("[DEBUG]  NGAP ICS: NAS-PDU present, len=%d\n", nas_pdu_len);
-                        int dump = nas->size < 24 ? nas->size : 24;
-                        printf("[DEBUG]   NAS-PDU[0..%d): ", dump);
-                        for (int k = 0; k < dump; k++) {
-                            printf("%02X ", nas->buf[k]);
-                        }
-                        if (nas->size > dump) printf("...");
-                        printf("\n");
+                        LOG_DEBUG(" NGAP ICS: NAS-PDU present, len=%d\n", nas_pdu_len);
+
+
                     }
                     break;
                 default:
@@ -237,12 +232,25 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
         if (ran_ue_id >= 0) ue_map = s1n2_context_find_mapping_by_ran(ctx, ran_ue_id);
         if (!ue_map && amf_ue_id >= 0) ue_map = s1n2_context_find_mapping_by_amf(ctx, amf_ue_id);
         if (ue_map) {
+            if ((session_nas || nas_ptr) && !ue_map->has_pdu_ipv4) {
+                uint8_t plain_buffer[2048], mac[4], seq;
+                const uint8_t *plain;
+                size_t plain_len;
+                bool has_mac;
+                if (nas_5g_security_unwrap(session_nas ? session_nas->buf : nas_ptr,
+                    session_nas ? session_nas->size : (size_t)nas_pdu_len, ue_map,
+                    &plain, &plain_len, plain_buffer, sizeof(plain_buffer), mac, &has_mac, &seq) != 0 ||
+                    s1n2_cache_pdu_address(ue_map, plain, plain_len) != 0) {
+                    LOG_ERROR("Invalid PDU Session Accept in NGAP context setup");
+                    return -1;
+                }
+            }
             // Mark that AMF has requested ICS
             ue_map->amf_ics_requested = true;
 
             // If we have cached S1AP ICS Response, convert to NGAP now (with correct QFI) and send
             if (ue_map->has_pending_s1ap_ics && ue_map->pending_s1ap_ics_len > 0) {
-                printf("[INFO] [ICS] Converting cached S1AP InitialContextSetupResponse to NGAP with QFI=%u\n", ue_map->qfi);
+                LOG_INFO("[ICS] Converting cached S1AP InitialContextSetupResponse to NGAP with QFI=%u\n", ue_map->qfi);
                 uint8_t ngap_data[512];
                 size_t ngap_len = sizeof(ngap_data);
                 if (s1n2_convert_initial_context_setup_response(ue_map->pending_s1ap_ics,
@@ -251,30 +259,30 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                     ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_data, (size_t)ngap_len,
                                                 NULL, 0, htonl(60), 0, 0, 0, 0);
                     if (sent == (ssize_t)ngap_len) {
-                        printf("[INFO] InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
+                        LOG_INFO("InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
                         ue_map->has_pending_s1ap_ics = false;
                         ue_map->pending_s1ap_ics_len = 0;
                         return 0; // handled
                     } else {
-                        printf("[WARN] Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
+                        LOG_WARN("Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
                                sent, errno, strerror(errno));
                     }
                 } else {
-                    printf("[ERROR] Failed to convert cached S1AP ICS Response to NGAP\n");
+                    LOG_ERROR("Failed to convert cached S1AP ICS Response to NGAP\n");
                 }
             }
             // Legacy: If we have a pending NGAP ICS (old implementation), send it now
             else if (ue_map->has_pending_ngap_ics && ue_map->pending_ngap_ics_len > 0) {
-                printf("[INFO] [ICS] Sending previously queued NGAP InitialContextSetupResponse upon AMF request\n");
+                LOG_INFO("[ICS] Sending previously queued NGAP InitialContextSetupResponse upon AMF request\n");
                 ssize_t sent = sctp_sendmsg(ctx->n2_fd, ue_map->pending_ngap_ics, (size_t)ue_map->pending_ngap_ics_len,
                                             NULL, 0, htonl(60), 0, 0, 0, 0);
                 if (sent == (ssize_t)ue_map->pending_ngap_ics_len) {
-                    printf("[INFO] InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
+                    LOG_INFO("InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
                     ue_map->has_pending_ngap_ics = false;
                     ue_map->pending_ngap_ics_len = 0;
                     return 0; // handled
                 } else {
-                    printf("[WARN] Failed to send queued NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
+                    LOG_WARN("Failed to send queued NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
                            sent, errno, strerror(errno));
                 }
             }
@@ -282,13 +290,13 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
             if (ue_map->mme_ue_s1ap_id > 0) mme_ue_id = ue_map->mme_ue_s1ap_id;
             // Suppress duplicate ICS if already completed or in-flight
             if (ue_map->ics_completed) {
-                printf("[INFO] [ICS] Already completed for UE (ENB=%ld) - no S1AP ICS needed\n", enb_ue_id);
+                LOG_INFO("[ICS] Already completed for UE (ENB=%ld) - no S1AP ICS needed\n", enb_ue_id);
                 return 0; // handled
             }
             if (ue_map->ics_sent) {
                 double elapsed = difftime(time(NULL), ue_map->ics_sent_time);
                 if (elapsed < 10.0) {
-                    printf("[INFO] [ICS] In-flight (sent %.1fs ago) for UE (ENB=%ld); ignoring NGAP ICS request\n", elapsed, enb_ue_id);
+                    LOG_INFO("[ICS] In-flight (sent %.1fs ago) for UE (ENB=%ld); ignoring NGAP ICS request\n", elapsed, enb_ue_id);
                     return 0; // handled
                 }
             }
@@ -311,11 +319,24 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
      */
     if (ue_map && ue_map->has_upf_n3_info && ue_map->has_s1n2_uplink_teid &&
         ue_map->s1n2_s1u_uplink_teid > 0 && ue_map->upf_n3_teid > 0) {
-        printf("[INFO] [ICS] Re-registering deferred uplink TEID mapping after S1-U endpoint selection\n");
+        LOG_INFO("[ICS] Re-registering deferred uplink TEID mapping after S1-U endpoint selection\n");
         s1n2_uplane_store_upf_n3_and_map(ctx, ue_map,
             ue_map->upf_n3_ip, ue_map->upf_n3_teid,
             (uint8_t)ue_map->pdu_session_id,
             ue_map->ics_e_rab_id ? ue_map->ics_e_rab_id : e_rab_id);
+    }
+
+    uint8_t attach_nas[512];
+    size_t attach_len = sizeof(attach_nas);
+    if (ue_map && ue_map->pending_registration_accept_len) {
+        if (!ue_map->has_pdu_ipv4 || registration_accept_convert_5g_to_4g(
+            ue_map->pending_registration_accept, ue_map->pending_registration_accept_len,
+            attach_nas, &attach_len, ue_map) != 0) {
+            LOG_ERROR("Cannot build EPS attach before the core assigns an IPv4 address");
+            return -1;
+        }
+        nas_ptr = attach_nas;
+        nas_pdu_len = (int)attach_len;
     }
 
     uint8_t s1ap_buf[2048];
@@ -326,21 +347,27 @@ int ics_request_handle_ngap_ics(s1n2_context_t *ctx, void *init_msg) {
                                                 e_rab_id, s1u_ip_be, s1u_teid_be,
                                                 (ue_map && ue_map->has_kenb) ? ue_map->kenb : NULL) == 0) {
         if (ctx->s1c_fd <= 0) {
-            printf("[ERROR] S1C not connected; cannot send S1AP ICS\n");
-            fflush(stdout);
+            LOG_ERROR("S1C not connected; cannot send S1AP ICS\n");
+
             return -1;
         }
         ssize_t sent = sctp_sendmsg(ctx->s1c_fd, s1ap_buf, s1ap_len, NULL, 0, htonl(18), 0, 0, 0, 0);
         if (sent == (ssize_t)s1ap_len) {
-            printf("[SUCCESS] NGAP ICS bridged to S1AP InitialContextSetupRequest (%zd bytes)\n", sent);
+            LOG_INFO("NGAP ICS bridged to S1AP InitialContextSetupRequest (%zd bytes)\n", sent);
+            if (ue_map) {
+                ue_map->ics_sent = true;
+                ue_map->ics_sent_time = time(NULL);
+                ue_map->ics_e_rab_id = e_rab_id;
+                ue_map->pending_registration_accept_len = 0;
+            }
         } else {
-            printf("[ERROR] Failed to send S1AP ICS (ret=%zd, errno=%d: %s)\n", sent, errno, strerror(errno));
+            LOG_ERROR("Failed to send S1AP ICS (ret=%zd, errno=%d: %s)\n", sent, errno, strerror(errno));
         }
-        fflush(stdout);
+
         return 0; // handled
     } else {
-        printf("[ERROR] Failed to build S1AP InitialContextSetupRequest\n");
-        fflush(stdout);
+        LOG_ERROR("Failed to build S1AP InitialContextSetupRequest\n");
+
         return -1;
     }
 }

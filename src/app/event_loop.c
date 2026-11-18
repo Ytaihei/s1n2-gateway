@@ -108,7 +108,7 @@ void event_loop_run(s1n2_context_t *ctx, const char *n2_remote_addr, int n2_remo
                         log_error("connect(S1U UDP->eNB) failed: %s", strerror(errno));
                     }
                 }
-                s1n2_handle_gtpu_message(ctx, buf, (size_t)n);
+                s1n2_handle_gtpu_message(ctx, buf, (size_t)n, S1N2_GTPU_FROM_S1U);
             }
         }
 
@@ -119,7 +119,7 @@ void event_loop_run(s1n2_context_t *ctx, const char *n2_remote_addr, int n2_remo
             struct sockaddr_in peer; socklen_t plen = sizeof(peer);
             ssize_t n = recvfrom(ctx->n3_fd, buf, sizeof(buf), 0, (struct sockaddr*)&peer, &plen);
             if (n > 0) {
-                s1n2_handle_gtpu_message(ctx, buf, (size_t)n);
+                s1n2_handle_gtpu_message(ctx, buf, (size_t)n, S1N2_GTPU_FROM_N3);
             }
         }
 

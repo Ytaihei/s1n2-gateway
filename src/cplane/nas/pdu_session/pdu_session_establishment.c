@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file pdu_session/pdu_session_establishment.c
  * @brief 5G PDU Session Establishment Request builder
@@ -26,11 +27,12 @@ int build_pdu_session_establishment_request(uint8_t *nas_5g,
                                             const char *dnn,
                                             uint8_t sst) {
     if (!nas_5g || !nas_5g_len || !dnn) {
-        printf("[ERROR] Invalid parameters for PDU Session Establishment Request\n");
+        LOG_ERROR("Invalid parameters for PDU Session Establishment Request\n");
         return -1;
     }
 
-    size_t max_len = *nas_5g_len;
+    /* Fixed fields, optional DNN and maximum security envelope. */
+    if (strlen(dnn) > 99 || *nas_5g_len < 20 + strlen(dnn)) return -1;
     size_t offset = 0;
 
     // Build plain 5GSM PDU Session Establishment Request
@@ -82,14 +84,9 @@ int build_pdu_session_establishment_request(uint8_t *nas_5g,
 
     // If UE context available and has 5G NAS keys, apply integrity protection
     if (ue_map && ue_map->has_5g_nas_keys) {
-        printf("[DEBUG] [PDU-SESSION-REQ] Computing 5G uplink MAC with K_NASint_5G\n");
-        printf("[DEBUG] [PDU-SESSION-REQ] COUNT=0x%08X, Direction=0, Bearer=1, Alg=EIA2\n",
+
+        LOG_DEBUG("[PDU-SESSION-REQ] COUNT=0x%08X, Direction=0, Bearer=1, Alg=EIA2\n",
                ue_map->nas_ul_count_5g);
-        printf("[DEBUG] [PDU-SESSION-REQ] K_NASint_5G: ");
-        for (int i = 0; i < 16; i++) {
-            printf("%02X", ue_map->k_nas_int_5g[i]);
-        }
-        printf("\n");
 
         // Compute MAC
         uint8_t mac[4] = {0};
@@ -101,12 +98,9 @@ int build_pdu_session_establishment_request(uint8_t *nas_5g,
         );
 
         if (ret != 0) {
-            printf("[ERROR] Failed to compute MAC for PDU Session Establishment Request\n");
+            LOG_ERROR("Failed to compute MAC for PDU Session Establishment Request\n");
             return -1;
         }
-
-        printf("[DEBUG] [PDU-SESSION-REQ] Computed MAC: %02X %02X %02X %02X\n",
-               mac[0], mac[1], mac[2], mac[3]);
 
         // Build security-protected NAS message
         // Move plain NAS to make room for security header
@@ -122,20 +116,14 @@ int build_pdu_session_establishment_request(uint8_t *nas_5g,
 
         // Increment UL COUNT
         ue_map->nas_ul_count_5g++;
-        printf("[DEBUG] [PDU-SESSION-REQ] Incremented nas_ul_count_5g to 0x%08X\n",
+        LOG_DEBUG("[PDU-SESSION-REQ] Incremented nas_ul_count_5g to 0x%08X\n",
                ue_map->nas_ul_count_5g);
     }
 
     *nas_5g_len = offset;
 
-    printf("[INFO] Built PDU Session Establishment Request (PDU Session ID=%u, DNN=%s, SST=%u, len=%zu)\n",
+    LOG_INFO("Built PDU Session Establishment Request (PDU Session ID=%u, DNN=%s, SST=%u, len=%zu)\n",
            pdu_session_id, dnn, sst, offset);
-    printf("[DEBUG] [PDU-SESSION-REQ] Message bytes: ");
-    for (size_t i = 0; i < (offset < 32 ? offset : 32); i++) {
-        printf("%02X ", nas_5g[i]);
-    }
-    if (offset > 32) printf("...");
-    printf("\n");
 
     return 0;
 }

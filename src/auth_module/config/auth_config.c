@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file auth_config.c
  * @brief Authentication configuration loading
@@ -29,7 +30,7 @@ int s1n2_auth_hex_to_bytes(const char *hex_str, uint8_t *bytes, size_t bytes_len
 
     size_t hex_len = strlen(hex_str);
     if (hex_len != bytes_len * 2) {
-        fprintf(stderr, "%s ERROR: Invalid hex string length %zu, expected %zu\n",
+        LOG_ERROR("%s ERROR: Invalid hex string length %zu, expected %zu\n",
                 LOG_TAG, hex_len, bytes_len * 2);
         return -1;
     }
@@ -118,7 +119,7 @@ int s1n2_auth_import_env_file(const char *path) {
 
     FILE *fp = fopen(path, "r");
     if (!fp) {
-        fprintf(stderr, "%s WARN: Unable to open env file %s: %s\n", LOG_TAG, path, strerror(errno));
+        LOG_WARN("%s WARN: Unable to open env file %s: %s\n", LOG_TAG, path, strerror(errno));
         return -1;
     }
 
@@ -173,7 +174,7 @@ int s1n2_auth_import_env_file(const char *path) {
     fclose(fp);
 
     if (imported > 0) {
-        printf("%s INFO: Imported %d environment variables from %s\n", LOG_TAG, imported, path);
+        LOG_INFO("%s INFO: Imported %d environment variables from %s\n", LOG_TAG, imported, path);
     }
 
     return imported;
@@ -223,7 +224,7 @@ int s1n2_auth_load_from_env(s1n2_auth_context_t *auth_ctx) {
 
         const char *ki_hex = getenv(ki_key);
         if (!ki_hex || !*ki_hex) {
-            fprintf(stderr, "%s WARN: Missing Ki environment variable %s for IMSI %s\n", LOG_TAG, ki_key, imsi);
+
             continue;
         }
 
@@ -245,7 +246,7 @@ int s1n2_auth_load_from_env(s1n2_auth_context_t *auth_ctx) {
                 loaded++;
             }
         } else {
-            fprintf(stderr, "%s WARN: UE_KI environment variable not found for UE_IMSI\n", LOG_TAG);
+
         }
     }
 
@@ -270,13 +271,13 @@ int s1n2_auth_load_from_env(s1n2_auth_context_t *auth_ctx) {
 
 int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) {
     if (!auth_ctx || !config_file) {
-        fprintf(stderr, "%s ERROR: NULL parameter\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter\n", LOG_TAG);
         return -1;
     }
 
     FILE *fp = fopen(config_file, "r");
     if (!fp) {
-        fprintf(stderr, "%s ERROR: Cannot open config file: %s\n", LOG_TAG, config_file);
+        LOG_ERROR("%s ERROR: Cannot open config file: %s\n", LOG_TAG, config_file);
         return -1;
     }
 
@@ -284,7 +285,7 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
     yaml_event_t event;
 
     if (!yaml_parser_initialize(&parser)) {
-        fprintf(stderr, "%s ERROR: Failed to initialize YAML parser\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: Failed to initialize YAML parser\n", LOG_TAG);
         fclose(fp);
         return -1;
     }
@@ -298,7 +299,7 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
 
     do {
         if (!yaml_parser_parse(&parser, &event)) {
-            fprintf(stderr, "%s ERROR: YAML parse error\n", LOG_TAG);
+            LOG_ERROR("%s ERROR: YAML parse error\n", LOG_TAG);
             break;
         }
 
@@ -313,12 +314,12 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
                 } else if (strcmp(current_key, "kdf_mode") == 0) {
                     if (strcmp(value, "standard") == 0) {
                         auth_ctx->res_star_kdf_mode = RES_STAR_KDF_STANDARD;
-                        printf("%s INFO: RES*/XRES* KDF mode: STANDARD (Kausf-based, TS 33.501 compliant)\n", LOG_TAG);
+
                     } else if (strcmp(value, "open5gs_compat") == 0) {
                         auth_ctx->res_star_kdf_mode = RES_STAR_KDF_OPEN5GS_COMPAT;
-                        printf("%s INFO: RES*/XRES* KDF mode: OPEN5GS_COMPAT (CK||IK-based, matches Open5GS v2.7.2 bug)\n", LOG_TAG);
+                        LOG_INFO("%s INFO: RES*/XRES* KDF mode: OPEN5GS_COMPAT (CK||IK-based, matches Open5GS v2.7.2 bug)\n", LOG_TAG);
                     } else {
-                        fprintf(stderr, "%s WARNING: Unknown res_star_kdf_mode '%s', using 'standard'\n", LOG_TAG, value);
+                        LOG_WARN("%s WARNING: Unknown res_star_kdf_mode '%s', using 'standard'\n", LOG_TAG, value);
                         auth_ctx->res_star_kdf_mode = RES_STAR_KDF_STANDARD;
                     }
                     current_key[0] = '\0';
@@ -327,7 +328,7 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
                 } else if (strcmp(current_key, "xor_conversion") == 0) {
                     if (strcmp(value, "true") == 0 || strcmp(value, "yes") == 0 || strcmp(value, "1") == 0) {
                         auth_ctx->xor_to_milenage_conversion = true;
-                        printf("%s INFO: XOR→Milenage conversion ENABLED\n", LOG_TAG);
+                        LOG_INFO("%s INFO: XOR→Milenage conversion ENABLED\n", LOG_TAG);
                     } else {
                         auth_ctx->xor_to_milenage_conversion = false;
                     }
@@ -340,14 +341,12 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
 
                         if (strcmp(current_key, "imsi") == 0) {
                             strncpy(sub->imsi, value, sizeof(sub->imsi) - 1);
-                            printf("%s INFO: Loaded subscriber IMSI: %s\n", LOG_TAG, sub->imsi);
+
                         } else if (strcmp(current_key, "ki") == 0) {
-                            if (s1n2_auth_hex_to_bytes(value, sub->ki, 16) == 0) {
-                                printf("%s INFO:   Ki loaded\n", LOG_TAG);
-                            }
+                            s1n2_auth_hex_to_bytes(value, sub->ki, 16);
                         } else if (strcmp(current_key, "opc") == 0) {
                             if (s1n2_auth_hex_to_bytes(value, sub->opc, 16) == 0) {
-                                printf("%s INFO:   OPc loaded\n", LOG_TAG);
+
                                 sub->configured = true;
                             }
                         }
@@ -396,6 +395,6 @@ int s1n2_auth_load_keys(s1n2_auth_context_t *auth_ctx, const char *config_file) 
     yaml_parser_delete(&parser);
     fclose(fp);
 
-    printf("%s INFO: Loaded %d subscribers\n", LOG_TAG, auth_ctx->subscriber_count);
+    LOG_INFO("%s INFO: Loaded %d subscribers\n", LOG_TAG, auth_ctx->subscriber_count);
     return auth_ctx->subscriber_count > 0 ? 0 : -1;
 }

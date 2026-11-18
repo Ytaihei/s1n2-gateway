@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file milenage.c
  * @brief Milenage f2-f5 functions (3GPP TS 35.206)
@@ -54,13 +55,13 @@ void s1n2_milenage_f2345(const uint8_t *opc, const uint8_t *k,
                          const uint8_t *rand,
                          uint8_t *res, uint8_t *ck, uint8_t *ik, uint8_t *ak) {
     if (!opc || !k || !rand) {
-        fprintf(stderr, "%s ERROR: NULL parameter in milenage_f2345\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter in milenage_f2345\n", LOG_TAG);
         return;
     }
 
     AES_KEY aes_key;
     if (AES_set_encrypt_key(k, 128, &aes_key) != 0) {
-        fprintf(stderr, "%s ERROR: Failed to initialise AES key for Milenage\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: Failed to initialise AES key for Milenage\n", LOG_TAG);
         return;
     }
 
@@ -134,7 +135,7 @@ int s1n2_decode_auts_sqn(const uint8_t *opc, const uint8_t *k,
                          const uint8_t *rand, const uint8_t *auts,
                          uint8_t *sqn_ms) {
     if (!opc || !k || !rand || !auts || !sqn_ms) {
-        fprintf(stderr, "%s ERROR: NULL parameter in decode_auts_sqn\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter in decode_auts_sqn\n", LOG_TAG);
         return -1;
     }
 

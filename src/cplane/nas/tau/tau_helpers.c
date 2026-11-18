@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file tau/tau_helpers.c
  * @brief Helper functions for TAU (Tracking Area Update) conversion
@@ -119,7 +120,7 @@ int s1n2_append_update_type(uint8_t *nas,
 		return -1;
 	}
 	if ((*offset) + 3 > capacity) {
-		printf("[ERROR] Not enough space to append 5GS update_type IE\n");
+		LOG_ERROR("Not enough space to append 5GS update_type IE\n");
 		return -1;
 	}
 	nas[(*offset)++] = S1N2_5GS_IEI_UPDATE_TYPE;
@@ -165,7 +166,7 @@ int s1n2_append_last_visited_tai(uint8_t *nas,
 		tac16 = s1n2_get_tac_from_env();
 	}
 	if ((*offset) + 8 > capacity) {
-		printf("[ERROR] Not enough space to append last_visited_registered_tai IE\n");
+		LOG_ERROR("Not enough space to append last_visited_registered_tai IE\n");
 		return -1;
 	}
 	nas[(*offset)++] = S1N2_5GS_IEI_LAST_VISITED_TAI;

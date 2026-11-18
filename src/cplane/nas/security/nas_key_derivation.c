@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file security/nas_key_derivation.c
  * @brief 4G NAS key derivation from cached authentication vectors
@@ -26,8 +27,7 @@ int s1n2_try_derive_4g_nas_keys(s1n2_context_t *ctx, ue_id_mapping_t *ue_map) {
 
     s1n2_subscriber_keys_t *keys = s1n2_auth_get_keys(ctx->auth_ctx, ue_map->imsi);
     if (!keys || !keys->configured) {
-        printf("[WARN] [NAS-KEY] Subscriber keys not found for IMSI %s\n", ue_map->imsi);
-        fflush(stdout);
+
         return -1;
     }
 
@@ -44,10 +44,14 @@ int s1n2_try_derive_4g_nas_keys(s1n2_context_t *ctx, ue_id_mapping_t *ue_map) {
         s1n2_encode_plmn_from_strings(env_mcc, env_mnc, plmn_id);
     }
 
-    uint8_t int_alg = (ue_map->selected_nas_security_alg >> 4) & 0x0F;
-    uint8_t enc_alg = ue_map->selected_nas_security_alg & 0x0F;
-    if (int_alg == 0) int_alg = 2;
-    if (enc_alg == 0) enc_alg = 2;
+    uint8_t int_alg = ue_map->selected_nas_security_alg & 0x07;
+    uint8_t enc_alg = (ue_map->selected_nas_security_alg >> 4) & 0x07;
+    /* Before SMC, retain the existing provisional AES keys. Once selected,
+     * algorithm 0 means NULL protection, not an unspecified algorithm. */
+    if (!ue_map->has_security_mode) {
+        int_alg = 2;
+        enc_alg = 2;
+    }
 
     int rc = s1n2_derive_4g_nas_keys(keys->ki, keys->opc,
                                      ue_map->rand,
@@ -61,13 +65,9 @@ int s1n2_try_derive_4g_nas_keys(s1n2_context_t *ctx, ue_id_mapping_t *ue_map) {
         ue_map->has_nas_keys = true;
         ue_map->nas_ul_count = 0;
         ue_map->nas_dl_count = 0;
-        printf("[SUCCESS] [NAS-KEY] Derived 4G NAS keys for IMSI %s (int_alg=%u enc_alg=%u)\n",
-               ue_map->imsi, int_alg, enc_alg);
-        fflush(stdout);
+
     } else {
-        printf("[ERROR] [NAS-KEY] Failed to derive NAS keys for IMSI %s (rc=%d)\n",
-               ue_map->imsi, rc);
-        fflush(stdout);
+
     }
     return rc;
 }

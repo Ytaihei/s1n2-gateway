@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file nas_4g_to_5g.c
  * @brief Uplink NAS dispatcher: 4G (EPS) → 5G (5GS) message routing
@@ -24,36 +25,29 @@ int convert_4g_nas_to_5g(s1n2_context_t *ctx, ue_id_mapping_t *ue_map,
 		return -1;
 	}
 
-	printf("[DEBUG] Converting 4G NAS-PDU to 5G (input len=%zu)\n", nas_4g_len);
-
-	printf("[DEBUG] 4G NAS-PDU bytes: ");
-	for (size_t i = 0; i < nas_4g_len && i < 16; i++) {
-		printf("%02X ", nas_4g[i]);
-	}
-	if (nas_4g_len > 16) printf("...");
-	printf("\n");
+	LOG_DEBUG("Converting 4G NAS-PDU to 5G (input len=%zu)\n", nas_4g_len);
 
 	uint8_t first_byte = nas_4g[0];
 	uint8_t second_byte = (nas_4g_len > 1) ? nas_4g[1] : 0x00;
 
-	printf("[DEBUG] 4G NAS: first_byte=0x%02X, second_byte=0x%02X\n", first_byte, second_byte);
+	LOG_DEBUG("4G NAS: first_byte=0x%02X, second_byte=0x%02X\n", first_byte, second_byte);
 
 	if (first_byte == 0x0C && second_byte == 0x07) {
-		printf("[INFO] Detected 4G Attach Request (0x0C 0x07 format)\n");
+		LOG_INFO("Detected 4G Attach Request (0x0C 0x07 format)\n");
 	} else {
 		uint8_t security_header = (first_byte >> 4) & 0x0F;
 		uint8_t protocol_discriminator = first_byte & 0x0F;
 
-		printf("[DEBUG] Standard 4G NAS: security_header=0x%X, protocol_discriminator=0x%X\n",
+		LOG_DEBUG("Standard 4G NAS: security_header=0x%X, protocol_discriminator=0x%X\n",
 			   security_header, protocol_discriminator);
 
 		if (protocol_discriminator != 0x07 && protocol_discriminator != 0x06) {
-			printf("[WARN] Not a 4G EMM/ESM message (PD=0x%X), cannot convert\n", protocol_discriminator);
+			LOG_WARN("Not a 4G EMM/ESM message (PD=0x%X), cannot convert\n", protocol_discriminator);
 			return -1;
 		}
 
 		if (protocol_discriminator == 0x06) {
-			printf("[INFO] Detected 4G ESM message (PD=0x6), converting to 5G Registration Request\n");
+			LOG_INFO("Detected 4G ESM message (PD=0x6), converting to 5G Registration Request\n");
 		}
 	}
 
@@ -63,7 +57,7 @@ int convert_4g_nas_to_5g(s1n2_context_t *ctx, ue_id_mapping_t *ue_map,
 	if (first_byte == 0x0C && second_byte == 0x07) {
 		msg_type = first_byte;
 		payload_offset = 2;
-		printf("[DEBUG] 4G Attach Request: msg_type=0x%02X, offset=%zu\n", msg_type, payload_offset);
+		LOG_DEBUG("4G Attach Request: msg_type=0x%02X, offset=%zu\n", msg_type, payload_offset);
 	} else {
 		uint8_t security_header = (first_byte >> 4) & 0x0F;
 
@@ -73,34 +67,34 @@ int convert_4g_nas_to_5g(s1n2_context_t *ctx, ue_id_mapping_t *ue_map,
 				payload_offset = 2;
 			}
 		} else if (security_header == 0x07) {
-			printf("[INFO] Processing security header type 0x7 (Attach Request)\n");
+			LOG_INFO("Processing security header type 0x7 (Attach Request)\n");
 			if (nas_4g_len > 1) {
 				msg_type = nas_4g[1];
 				payload_offset = 2;
 			}
 		} else {
-			printf("[WARN] Secured NAS message (security=0x%X) - attempting protected conversion\n", security_header);
+			LOG_WARN("Secured NAS message (security=0x%X) - attempting protected conversion\n", security_header);
 			if (nas_4g_len <= 7) {
-				printf("[ERROR] Secured NAS message too short for payload (len=%zu)\n", nas_4g_len);
+				LOG_ERROR("Secured NAS message too short for payload (len=%zu)\n", nas_4g_len);
 				return -1;
 			}
 			const size_t inner_header_offset = 6;
 			uint8_t inner_first_octet = nas_4g[inner_header_offset];
 			uint8_t inner_security_header = (inner_first_octet >> 4) & 0x0F;
 			uint8_t inner_protocol_discriminator = inner_first_octet & 0x0F;
-			printf("[DEBUG] Inner NAS header: security=0x%X, protocol=0x%X\n",
+			LOG_DEBUG("Inner NAS header: security=0x%X, protocol=0x%X\n",
 				   inner_security_header, inner_protocol_discriminator);
 			if (inner_protocol_discriminator != 0x07) {
-				printf("[WARN] Unexpected protocol discriminator inside protected NAS (pd=0x%X)\n",
+				LOG_WARN("Unexpected protocol discriminator inside protected NAS (pd=0x%X)\n",
 					   inner_protocol_discriminator);
 			}
 			if (inner_security_header != 0x00 && inner_security_header != 0x01) {
-				printf("[DEBUG] Inner NAS payload itself uses security header 0x%X\n",
+				LOG_DEBUG("Inner NAS payload itself uses security header 0x%X\n",
 					   inner_security_header);
 			}
 			size_t message_type_offset = inner_header_offset + 1;
 			if (message_type_offset >= nas_4g_len) {
-				printf("[ERROR] Secured NAS message missing message type (len=%zu)\n", nas_4g_len);
+				LOG_ERROR("Secured NAS message missing message type (len=%zu)\n", nas_4g_len);
 				return -1;
 			}
 			msg_type = nas_4g[message_type_offset];
@@ -111,7 +105,7 @@ int convert_4g_nas_to_5g(s1n2_context_t *ctx, ue_id_mapping_t *ue_map,
 	/* ---- Cache UE Security Capability IE (0x5E) ---- */
 	cache_ue_security_capability(ue_map, nas_4g, nas_4g_len, payload_offset);
 
-	printf("[DEBUG] 4G Message Type: 0x%02X\n", msg_type);
+	LOG_DEBUG("4G Message Type: 0x%02X\n", msg_type);
 
 	// ===== Registration Module (Phase 5 extraction) =====
 	// 0x43 = Attach Complete → Registration Complete

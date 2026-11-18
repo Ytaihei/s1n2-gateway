@@ -14,11 +14,14 @@ subscriber-data changes as high-risk changes that require focused review.
 - Do not assume that this repository's `main` branch is compatible with the
   latest branch of the integration repository. Before integration work, record
   both exact commit SHAs and preserve the parent's submodule pin.
-- Full execution is permitted only on the authorized remote host while it is
+- The real integration stack is permitted only on the authorized remote host while it is
   connected to RG-VPN and the real base station is available.
-- Never run `docker compose up`, attach to the eNB, change live subscriber
-  state, or perform an end-to-end test on a developer Mac, in GitHub Actions,
-  or on an arbitrary host.
+- Never run the real integration Compose stack, attach to the physical eNB,
+  or change live subscriber state on a developer machine or in GitHub Actions.
+- The synthetic `lab/` environment is a separate, opt-in Linux test fixture.
+  Run it only when the user requests virtual integration testing. Use
+  `python3 lab/run.py`, which isolates the network and tears down its services;
+  never copy deployment credentials into it. Unit tests run with `--network none`.
 - GitHub Actions is build-only. A successful CI build does not establish
   end-to-end compatibility with the remote host, core network, eNB, UE, or VPN.
 
@@ -77,7 +80,7 @@ subscriber-data changes as high-risk changes that require focused review.
 5. Run focused unit tests when they exist. The current `Makefile` exposes a
    `test` target, but do not claim tests passed when the repository contains no
    corresponding test sources.
-6. Do not run the full Compose stack as part of routine validation. If an
+6. Do not run the real integration Compose stack as part of routine validation. If an
    authorized remote integration test is required, first provide the exact
    commands, affected services, rollback plan, and expected evidence, then wait
    for explicit approval.
@@ -93,7 +96,8 @@ Every PR or task summary must distinguish among:
 - source review completed;
 - build completed;
 - unit tests completed;
-- integration test not run; or
+- opt-in synthetic virtual integration test completed (report profile and scope);
+- real integration test not run; or
 - authorized remote-host/eNB integration test completed.
 
 When the remote integration test was not run, state that limitation plainly and

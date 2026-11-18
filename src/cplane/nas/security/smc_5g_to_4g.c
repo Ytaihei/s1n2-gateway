@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file security/smc_5g_to_4g.c
  * @brief 5G Security Mode Command → 4G Security Mode Command conversion
@@ -123,13 +124,13 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 	//  0  EEA    0  EIA
 	// Bits 7,3: Spare (0), Bits 6-4: EEA, Bits 2-0: EIA
 	uint8_t selected_alg_4g = (uint8_t)(((eea & 0x07) << 4) | (eia & 0x07));
-	printf("[DEBUG] Selected NAS alg mapping: 5G (nea=%u, nia=%u) -> 4G (eea=%u, eia=%u, octet=0x%02X)\n",
+	LOG_DEBUG("Selected NAS alg mapping: 5G (nea=%u, nia=%u) -> 4G (eea=%u, eia=%u, octet=0x%02X)\n",
 	    nea, nia, eea, eia, selected_alg_4g);
 	uint8_t eea_byte = (ue_sec_cap_len >= 3) ? ue_sec_cap_buf[2] : 0x00;
 	uint8_t eia_byte = (ue_sec_cap_len >= 4) ? ue_sec_cap_buf[3] : 0x00;
 	uint8_t eea_eps = eea_byte;
 	uint8_t eia_eps = eia_byte;
-	printf("[DEBUG] EPS capability fallback: using 5G EEA byte=0x%02X, EIA byte=0x%02X\n",
+	LOG_DEBUG("EPS capability fallback: using 5G EEA byte=0x%02X, EIA byte=0x%02X\n",
 	       eea_eps, eia_eps);
 
 	uint8_t replay_cap[S1N2_MAX_UE_SECURITY_CAP_LEN] = {0};
@@ -143,11 +144,7 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 			replay_len = S1N2_MAX_UE_SECURITY_CAP_LEN;
 		}
 		memcpy(replay_cap, security_cache->ue_network_cap_4g, replay_len);
-		printf("[INFO] Using cached 4G UE network capability from Attach Request (len=%zu): ", replay_len);
-		for (size_t i = 0; i < replay_len; i++) {
-			printf("%02X ", replay_cap[i]);
-		}
-		printf("\n");
+
 	} else if (security_cache && security_cache->has_cached_ue_security_cap &&
 		security_cache->cached_ue_security_cap_len > 0) {
 		// Fallback to 5G-derived capability if 4G original not available
@@ -156,12 +153,12 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 			replay_len = S1N2_MAX_UE_SECURITY_CAP_LEN;
 		}
 		memcpy(replay_cap, security_cache->cached_ue_security_cap, replay_len);
-		printf("[DEBUG] Using cached 5G-derived UE security capability (4G not available, len=%zu)\n", replay_len);
+		LOG_DEBUG("Using cached 5G-derived UE security capability (4G not available, len=%zu)\n", replay_len);
 	} else {
 		replay_len = 2;
 		replay_cap[0] = eea_eps;
 		replay_cap[1] = eia_eps;
-		printf("[WARN] No cached UE security capability available; falling back to EPS-only (%02X %02X)\n",
+		LOG_WARN("No cached UE security capability available; falling back to EPS-only (%02X %02X)\n",
 		   replay_cap[0], replay_cap[1]);
 	}
 
@@ -182,11 +179,11 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 
 	if (imeisv_requested) {
 		plain_nas[plain_len++] = (uint8_t)(0xC0 | 0x01);
-		printf("[DEBUG] Added IMEISV request IE for 4G (IEI=0xC1)\n");
+
 	}
 
 	if (additional_present) {
-		printf("[DEBUG] Skipping Additional 5G security info IE (value=0x%02X) for 4G SMC\n",
+		LOG_DEBUG("Skipping Additional 5G security info IE (value=0x%02X) for 4G SMC\n",
 			additional_value);
 	}
 
@@ -206,18 +203,12 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 			case 2: alg = S1N2_NAS_EIA2; break;
 			case 3: alg = S1N2_NAS_EIA3; break;
 			default:
-				printf("[WARN] Unknown EIA algorithm %u, defaulting to EIA0\n", eia_alg);
+				LOG_WARN("Unknown EIA algorithm %u, defaulting to EIA0\n", eia_alg);
 				alg = S1N2_NAS_EIA0;
 				break;
 		}
 
 		count_value = security_cache->nas_dl_count;
-
-		printf("[DEBUG] Using K_NASint for MAC: ");
-		for (int i = 0; i < 16; i++) {
-			printf("%02X", security_cache->k_nas_int[i]);
-		}
-		printf("\n");
 
 		// Build MAC input: sequence number (COUNT LSB) + plain NAS message
 		// This matches srsRAN UE behavior (&pdu->msg[seq_offset] where seq_offset=5)
@@ -226,23 +217,15 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 		memcpy(mac_input + 1, plain_nas, plain_len);
 		size_t mac_input_len = 1 + plain_len;
 
-		printf("[DEBUG] MAC input for SMC (%zu bytes): ", mac_input_len);
-		for (size_t i = 0; i < mac_input_len; i++) {
-			printf("%02X ", mac_input[i]);
-		}
-		printf("\n");
-
 		if (s1n2_compute_smc_mac(alg, security_cache->k_nas_int, count_value,
 		                         mac_input, mac_input_len, computed_mac) == 0) {
 			use_integrity = true;
-			printf("[INFO] Computed 4G NAS MAC for SMC: %02X %02X %02X %02X (COUNT=0x%08X, EIA=%u)\n",
-			       computed_mac[0], computed_mac[1], computed_mac[2], computed_mac[3],
-			       count_value, eia_alg);
+
 		} else {
-			printf("[WARN] Failed to compute NAS MAC, sending plain SMC\n");
+			LOG_WARN("Failed to compute NAS MAC, sending plain SMC\n");
 		}
 	} else {
-		printf("[WARN] No NAS keys available in security_cache, sending plain SMC\n");
+		LOG_WARN("No NAS keys available in security_cache, sending plain SMC\n");
 	}
 
 	// Step 3: Build final message with or without integrity protection
@@ -313,21 +296,13 @@ int smc_convert_5g_to_4g(const uint8_t *payload,
 	}
 	s1n2_log_security_mode_result("downlink", true, plain_pd, msg_type, detail_buf);
 
-	printf("[DEBUG] 4G Security Mode Command bytes: ");
-	for (size_t i = 0; i < *nas_4g_len && i < 32; i++) {
-		printf("%02X ", nas_4g[i]);
-	}
-	if (*nas_4g_len > 32) printf("...");
-	printf("\n");
-	fflush(stdout);
-
 	// Initialize DL COUNT to 0 when sending Security Mode Command
 	// This matches Open5GS behavior (new_security_context resets dl_count)
 	if (security_cache && security_cache->has_nas_keys) {
 		ue_id_mapping_t *mutable_cache = (ue_id_mapping_t *)security_cache;
 		mutable_cache->nas_dl_count = 0;
-		printf("[DEBUG] [SMC] Initialized 4G DL COUNT to 0 (new security context)\n");
-		fflush(stdout);
+		LOG_DEBUG("[SMC] Initialized 4G DL COUNT to 0 (new security context)\n");
+
 	}
 
 	return 0;

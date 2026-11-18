@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file sctp_transport.c
  * @brief SCTP transport initialization and connection management
@@ -158,36 +159,36 @@ ssize_t sctp_retry_send(int fd, const void *data, size_t len, uint32_t ppid,
             ssize_t sent = sctp_sendmsg(fd, data, len,
                                         NULL, 0, htonl(ppid), 0, 0, 0, 0);
             if (sent == (ssize_t)len) {
-                printf("[INFO] %s sent (%zd bytes, PPID=%u)\n", label, sent, ppid);
-                fflush(stdout);
+                LOG_INFO("%s sent (%zd bytes, PPID=%u)\n", label, sent, ppid);
+
                 return sent;
             }
             if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                 /* transient — continue retrying within budget */
             } else {
                 if (errno == EPIPE || errno == ECONNRESET) {
-                    printf("[WARN] Connection broken during %s send (errno=%d: %s)\n",
+                    LOG_WARN("Connection broken during %s send (errno=%d: %s)\n",
                            label, errno, strerror(errno));
                 } else {
-                    printf("[ERROR] Failed to send %s via SCTP (ret=%zd, PPID=%u, errno=%d: %s)\n",
+                    LOG_ERROR("Failed to send %s via SCTP (ret=%zd, PPID=%u, errno=%d: %s)\n",
                            label, sent, ppid, errno, strerror(errno));
                 }
-                fflush(stdout);
+
                 return -1;
             }
         } else if (poll_ret < 0 && errno != EINTR) {
-            printf("[ERROR] poll() failed before %s send (errno=%d: %s)\n",
+            LOG_ERROR("poll() failed before %s send (errno=%d: %s)\n",
                    label, errno, strerror(errno));
-            fflush(stdout);
+
             return -1;
         }
 
         total_wait_ms += backoff_ms;
         if (backoff_ms < 200) backoff_ms += 50;
         if (total_wait_ms >= max_wait_ms) {
-            printf("[WARN] Socket not writable after %dms, deferring %s\n",
+            LOG_WARN("Socket not writable after %dms, deferring %s\n",
                    total_wait_ms, label);
-            fflush(stdout);
+
             return -1;
         }
     }

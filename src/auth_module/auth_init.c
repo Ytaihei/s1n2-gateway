@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file auth_init.c
  * @brief Authentication context initialization and cleanup
@@ -21,7 +22,7 @@
 
 int s1n2_auth_init(s1n2_auth_context_t *auth_ctx, const char *config_file) {
     if (!auth_ctx) {
-        fprintf(stderr, "%s ERROR: NULL authentication context\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL authentication context\n", LOG_TAG);
         return -1;
     }
 
@@ -38,7 +39,7 @@ int s1n2_auth_init(s1n2_auth_context_t *auth_ctx, const char *config_file) {
         if (s1n2_auth_load_keys(auth_ctx, config_file) == 0) {
             total_sources++;
         } else {
-            fprintf(stderr, "%s WARN: Falling back to environment-based subscriber configuration\n", LOG_TAG);
+            LOG_WARN("%s WARN: Falling back to environment-based subscriber configuration\n", LOG_TAG);
         }
     }
 
@@ -90,11 +91,11 @@ int s1n2_auth_init(s1n2_auth_context_t *auth_ctx, const char *config_file) {
     }
 
     if (auth_ctx->subscriber_count == 0) {
-        fprintf(stderr, "%s ERROR: No subscriber authentication keys available after initialization\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: No subscriber authentication keys available after initialization\n", LOG_TAG);
         return -1;
     }
 
-    printf("%s INFO: Authentication context initialized with %d subscribers (%d source(s))\n",
+    LOG_INFO("%s INFO: Authentication context initialized with %d subscribers (%d source(s))\n",
            LOG_TAG, auth_ctx->subscriber_count, total_sources);
 
     return 0;
@@ -113,5 +114,5 @@ void s1n2_auth_cleanup(s1n2_auth_context_t *auth_ctx) {
     memset(auth_ctx->subscribers, 0, sizeof(auth_ctx->subscribers));
     memset(auth_ctx->auth_cache, 0, sizeof(auth_ctx->auth_cache));
 
-    printf("%s INFO: Cleaned up authentication context\n", LOG_TAG);
+    LOG_INFO("%s INFO: Cleaned up authentication context\n", LOG_TAG);
 }

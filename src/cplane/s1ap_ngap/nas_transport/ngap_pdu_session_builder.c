@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file ngap_pdu_session_builder.c
  * @brief NGAP PDUSessionResourceSetupRequest ASN.1 encoder
@@ -52,9 +53,9 @@ int build_ngap_pdu_session_setup_request(uint8_t *buffer, size_t *buffer_len,
         return -1;
     }
 
-    printf("[INFO] Building NGAP PDUSessionResourceSetupRequest: PDU Session ID=%u, QCI/QFI=%u\n",
+    LOG_INFO("Building NGAP PDUSessionResourceSetupRequest: PDU Session ID=%u, QCI/QFI=%u\n",
            pdu_session_id, qci);
-    printf("[INFO]   UPF: IP=%s, TEID=0x%08x\n",
+    LOG_INFO("  UPF: IP=%s, TEID=0x%08x\n",
            inet_ntoa(*(struct in_addr *)&upf_ipv4_be), ntohl(upf_teid_be));
 
     NGAP_PDUSessionResourceSetupRequestTransfer_t transfer_msg;
@@ -64,7 +65,7 @@ int build_ngap_pdu_session_setup_request(uint8_t *buffer, size_t *buffer_len,
     NGAP_PDUSessionResourceSetupRequestTransferIEs_t *ie =
         calloc(1, sizeof(NGAP_PDUSessionResourceSetupRequestTransferIEs_t));
     if (!ie) {
-        printf("[ERROR] Failed to allocate IE for UL-NGU-UP-TNLInformation\n");
+        LOG_ERROR("Failed to allocate IE for UL-NGU-UP-TNLInformation\n");
         return -1;
     }
     ie->id = NGAP_ProtocolIE_ID_id_UL_NGU_UP_TNLInformation;
@@ -76,7 +77,7 @@ int build_ngap_pdu_session_setup_request(uint8_t *buffer, size_t *buffer_len,
     uplink_tnl->choice.gTPTunnel = calloc(1, sizeof(NGAP_GTPTunnel_t));
     if (!uplink_tnl->choice.gTPTunnel) {
         free(ie);
-        printf("[ERROR] Failed to allocate GTPTunnel\n");
+        LOG_ERROR("Failed to allocate GTPTunnel\n");
         return -1;
     }
 
@@ -159,12 +160,12 @@ int build_ngap_pdu_session_setup_request(uint8_t *buffer, size_t *buffer_len,
     ssize_t transfer_bytes = aper_encode_to_new_buffer(&asn_DEF_NGAP_PDUSessionResourceSetupRequestTransfer,
                                                        NULL, &transfer_msg, &transfer_buf);
     if (transfer_bytes <= 0 || !transfer_buf) {
-        printf("[ERROR] Failed to encode PDUSessionResourceSetupRequestTransfer\n");
+        LOG_ERROR("Failed to encode PDUSessionResourceSetupRequestTransfer\n");
         ASN_STRUCT_FREE_CONTENTS_ONLY(asn_DEF_NGAP_PDUSessionResourceSetupRequestTransfer, &transfer_msg);
         return -1;
     }
 
-    printf("[INFO] Encoded PDUSessionResourceSetupRequestTransfer: %zd bytes\n", transfer_bytes);
+    LOG_INFO("Encoded PDUSessionResourceSetupRequestTransfer: %zd bytes\n", transfer_bytes);
 
     /* Build main NGAP PDU */
     NGAP_NGAP_PDU_t *pdu = calloc(1, sizeof(NGAP_NGAP_PDU_t));
@@ -243,24 +244,24 @@ int build_ngap_pdu_session_setup_request(uint8_t *buffer, size_t *buffer_len,
 
     asn_enc_rval_t er = aper_encode_to_buffer(&asn_DEF_NGAP_NGAP_PDU, NULL, pdu, buffer, *buffer_len);
     if (er.encoded == -1) {
-        printf("[ERROR] Failed to encode NGAP PDUSessionResourceSetupRequest: %s\n",
+        LOG_ERROR("Failed to encode NGAP PDUSessionResourceSetupRequest: %s\n",
                er.failed_type ? er.failed_type->name : "unknown");
         goto fail;
     }
 
     size_t bytes = (er.encoded + 7) / 8;
     if (bytes > *buffer_len) {
-        printf("[ERROR] NGAP PDUSessionResourceSetupRequest too large: %zu > %zu\n", bytes, *buffer_len);
+        LOG_ERROR("NGAP PDUSessionResourceSetupRequest too large: %zu > %zu\n", bytes, *buffer_len);
         goto fail;
     }
     *buffer_len = bytes;
 
-    printf("[INFO] Successfully built NGAP PDUSessionResourceSetupRequest (%zu bytes)\n", bytes);
+    LOG_INFO("Successfully built NGAP PDUSessionResourceSetupRequest (%zu bytes)\n", bytes);
     ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
     return 0;
 
 fail:
-    printf("[ERROR] Failed to build NGAP PDUSessionResourceSetupRequest\n");
+    LOG_ERROR("Failed to build NGAP PDUSessionResourceSetupRequest\n");
     ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
     return -1;
 }

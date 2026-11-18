@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file main.c
  * @brief s1n2-converter entry point
@@ -26,7 +27,7 @@ static void handle_signal(int signum) {
 static int run_healthcheck(void) {
     FILE *f = fopen("/proc/net/sctp/assocs", "r");
     if (!f) {
-        fprintf(stderr, "healthcheck: cannot open /proc/net/sctp/assocs\n");
+        LOG_INFO("healthcheck: cannot open /proc/net/sctp/assocs\n");
         return 1;
     }
     int count = 0;
@@ -37,7 +38,7 @@ static int run_healthcheck(void) {
     }
     fclose(f);
     if (count < 2) {
-        fprintf(stderr, "SCTP associations not fully up (addr lines=%d)\n", count);
+        LOG_INFO("SCTP associations not fully up (addr lines=%d)\n", count);
         return 1;
     }
     return 0;
@@ -107,9 +108,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("[INFO] s1n2-converter: E-RAB management initialized - capacity: %d contexts, next PDU Session ID: %u\n",
+    LOG_INFO("s1n2-converter: E-RAB management initialized - capacity: %d contexts, next PDU Session ID: %u\n",
            16, g_ctx.next_pdu_session_id);
-    fflush(stdout);
 
     /* Initialize transports */
     if (sctp_transport_init_s1c(&g_ctx, s1c_bind_addr, s1c_port) != 0) return 1;
@@ -133,5 +133,4 @@ int main(int argc, char **argv) {
     log_info("s1n2-converter stop");
     return 0;
 }
-
 

@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file tau/tau_request_4g_to_5g.c
  * @brief 4G TAU Request (0x48) → 5G Registration Request (mobility update)
@@ -39,7 +40,7 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 
 	uint8_t protocol_discriminator = first_byte & 0x0F;
 	if (protocol_discriminator == 0x06) {
-		printf("[INFO] 4G NAS uses ESM protocol discriminator (0x6); generating Registration Request for 5GMM\n");
+		LOG_INFO("4G NAS uses ESM protocol discriminator (0x6); generating Registration Request for 5GMM\n");
 	}
 
 	/* ============================================================
@@ -55,10 +56,9 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	}
 
 	uint8_t registration_value = s1n2_map_eps_update_type(eps_update_type);
-	printf("[INFO] ========== Converting 4G TAU Request (0x48) -> 5G Registration Update =========\n");
-	printf("[INFO] EPS update type=0x%02X mapped to 5GS registration type=0x%02X (follow_on=%u)\n",
+	LOG_INFO("========== Converting 4G TAU Request (0x48) -> 5G Registration Update =========\n");
+	LOG_INFO("EPS update type=0x%02X mapped to 5GS registration type=0x%02X (follow_on=%u)\n",
 	       eps_update_type, registration_value, follow_on_request);
-	fflush(stdout);
 
 	/* Message Type: Registration Request (0x41) */
 	nas_5g[nas_5g_offset++] = 0x41;
@@ -81,20 +81,20 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	if (using_cached_guti) {
 		identity_payload = ue_map->last_5g_guti;
 		identity_len = ue_map->last_5g_guti_len;
-		printf("[INFO] Reusing cached 5G-GUTI for TAU mobility update (len=%zu)\n", identity_len);
+		LOG_INFO("Reusing cached 5G-GUTI for TAU mobility update (len=%zu)\n", identity_len);
 	} else {
 		/* TAU without cached GUTI is unusual; fall back to initial registration
 		 * delegated to the registration module.  Log and return error. */
-		printf("[ERROR] TAU Request but no cached 5G-GUTI available — cannot build mobility Registration Request\n");
+		LOG_ERROR("TAU Request but no cached 5G-GUTI available — cannot build mobility Registration Request\n");
 		return -1;
 	}
 
 	if (identity_len == 0 || identity_len > 0xFFFF) {
-		printf("[ERROR] Invalid 5GS mobile identity length=%zu\n", identity_len);
+		LOG_ERROR("Invalid 5GS mobile identity length=%zu\n", identity_len);
 		return -1;
 	}
 	if (nas_5g_offset + 2 + identity_len > nas_capacity) {
-		printf("[ERROR] 5G NAS buffer too small for mobile identity (need %zu, cap %zu)\n",
+		LOG_ERROR("5G NAS buffer too small for mobile identity (need %zu, cap %zu)\n",
 		       2UL + identity_len, nas_capacity - nas_5g_offset);
 		return -1;
 	}
@@ -110,12 +110,12 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	uint8_t update_ie_value = s1n2_map_eps_update_type_to_update_ie(eps_update_type);
 	if (s1n2_append_update_type(nas_5g, &nas_5g_offset, nas_capacity,
 	                            update_ie_value) == 0) {
-		printf("[DEBUG] Added 5GS update_type IE (value=0x%02X)\n", update_ie_value);
+		LOG_DEBUG("Added 5GS update_type IE (value=0x%02X)\n", update_ie_value);
 	}
 	if (s1n2_append_last_visited_tai(nas_5g, &nas_5g_offset, nas_capacity, ue_map) == 0) {
-		printf("[DEBUG] Added last_visited_registered_tai IE (len=6)\n");
+		LOG_DEBUG("Added last_visited_registered_tai IE (len=6)\n");
 	} else {
-		printf("[WARN] Could not append last_visited_registered_tai IE (missing location or buffer)\n");
+		LOG_WARN("Could not append last_visited_registered_tai IE (missing location or buffer)\n");
 	}
 
 	/* ============================================================
@@ -125,7 +125,7 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	const size_t ue_security_ie_len = sizeof(ue_security_payload) + 2;
 	if (nas_5g_offset + ue_security_ie_len > nas_capacity) {
 		size_t remaining = (nas_capacity > nas_5g_offset) ? (nas_capacity - nas_5g_offset) : 0;
-		printf("[ERROR] 5G NAS buffer too small for UE security capability IE (need %zu, cap %zu)\n",
+		LOG_ERROR("5G NAS buffer too small for UE security capability IE (need %zu, cap %zu)\n",
 		       ue_security_ie_len, remaining);
 		return -1;
 	}
@@ -133,10 +133,6 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	nas_5g[nas_5g_offset++] = sizeof(ue_security_payload);
 	memcpy(nas_5g + nas_5g_offset, ue_security_payload, sizeof(ue_security_payload));
 	nas_5g_offset += sizeof(ue_security_payload);
-
-	printf("[DEBUG] UE Security Capability IE added (5G-NEA=0x%02X, 5G-NIA=0x%02X, EEA=0x%02X, EIA=0x%02X)\n",
-	       ue_security_payload[0], ue_security_payload[1],
-	       ue_security_payload[2], ue_security_payload[3]);
 
 	/* ============================================================
 	 * PDU Session Status IE (mobility registrations with security context)
@@ -150,13 +146,13 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		if (can_send_pdu_status_ie) {
 			if (s1n2_append_pdu_session_status(nas_5g, &nas_5g_offset, nas_capacity,
 			                                   pdu_session_status_mask) == 0) {
-				printf("[DEBUG] Added PDU Session Status IE (mask=0x%04X)\n", pdu_session_status_mask);
+				LOG_DEBUG("Added PDU Session Status IE (mask=0x%04X)\n", pdu_session_status_mask);
 			} else {
-				printf("[WARN] Failed to append PDU Session Status IE (mask=0x%04X)\n",
+				LOG_WARN("Failed to append PDU Session Status IE (mask=0x%04X)\n",
 				       pdu_session_status_mask);
 			}
 		} else {
-			printf("[TRACE] Skipped PDU Session Status IE (mask=0x%04X) because NAS is not integrity protected yet\n",
+			LOG_TRACE("Skipped PDU Session Status IE (mask=0x%04X) because NAS is not integrity protected yet\n",
 			       pdu_session_status_mask);
 		}
 	}
@@ -169,7 +165,7 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		if (s1n2_compute_5g_uplink_mac(ue_map, nas_5g, nas_5g_offset, mac) == 0) {
 			size_t protected_len = nas_5g_offset + 7;
 			if (protected_len > nas_capacity) {
-				printf("[ERROR] Buffer too small to wrap Registration Request with security (need=%zu, cap=%zu)\n",
+				LOG_ERROR("Buffer too small to wrap Registration Request with security (need=%zu, cap=%zu)\n",
 				       protected_len, nas_capacity);
 			} else {
 				memmove(nas_5g + 7, nas_5g, nas_5g_offset);
@@ -182,14 +178,14 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 				nas_5g[6] = (uint8_t)(ue_map->nas_ul_count_5g & 0xFF);
 				nas_5g_offset = protected_len;
 				ue_map->nas_ul_count_5g++;
-				printf("[INFO] Mobility Registration Request integrity protected (reg_type=0x%02X, seq=0x%02X)\n",
+				LOG_INFO("Mobility Registration Request integrity protected (reg_type=0x%02X, seq=0x%02X)\n",
 				       registration_value, nas_5g[6]);
 			}
 		} else {
-			printf("[WARN] Failed to compute MAC for Mobility Registration Request; sending plain\n");
+			LOG_WARN("Failed to compute MAC for Mobility Registration Request; sending plain\n");
 		}
 	} else if (has_secure_context) {
-		printf("[TRACE] Leaving initial Registration Request plain despite keys (reg_type=0x%02X)\n",
+		LOG_TRACE("Leaving initial Registration Request plain despite keys (reg_type=0x%02X)\n",
 		       registration_value);
 	}
 
@@ -198,17 +194,9 @@ int tau_request_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	/* ============================================================
 	 * Logging
 	 * ============================================================ */
-	printf("[DEBUG] 5G Registration Request created (len=%zu, 5G-GUTI=cached)\n", *nas_5g_len);
+	LOG_DEBUG("5G Registration Request created (len=%zu, 5G-GUTI=cached)\n", *nas_5g_len);
 	s1n2_dump_hex("[NAS][UL] Registration Request", nas_5g, *nas_5g_len);
-	printf("[DEBUG] Cached 5G-GUTI payload (len=%u): ", ue_map ? ue_map->last_5g_guti_len : 0);
-	if (ue_map) {
-		for (size_t i = 0; i < ue_map->last_5g_guti_len && i < 16; ++i) {
-			printf("%02X ", ue_map->last_5g_guti[i]);
-		}
-		if (ue_map->last_5g_guti_len > 16) printf("...");
-	}
-	printf("\n");
-	fflush(stdout);
+
 
 	return 0;
 }

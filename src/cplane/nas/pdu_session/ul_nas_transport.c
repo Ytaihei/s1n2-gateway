@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file pdu_session/ul_nas_transport.c
  * @brief 5GMM UL NAS Transport with N1 SM information builder
@@ -28,7 +29,7 @@ int build_gmm_ul_nas_transport_with_n1_sm(uint8_t *nas_5g,
                                            uint8_t sst,
                                            uint8_t request_type) {
     if (!nas_5g || !nas_5g_len || !ue_map || !dnn) {
-        printf("[ERROR] Invalid parameters for UL NAS Transport with N1 SM\n");
+        LOG_ERROR("Invalid parameters for UL NAS Transport with N1 SM\n");
         return -1;
     }
 
@@ -82,7 +83,7 @@ int build_gmm_ul_nas_transport_with_n1_sm(uint8_t *nas_5g,
 
     gsm_len = offset_gsm;
 
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Built inner 5GSM payload (%zu bytes)\n", gsm_len);
+    LOG_DEBUG("[UL-NAS-TRANSPORT] Built inner 5GSM payload (%zu bytes)\n", gsm_len);
 
     // Step 2: Build 5GMM UL NAS Transport (plain, before security)
     uint8_t gmm_plain[1024];
@@ -131,31 +132,28 @@ int build_gmm_ul_nas_transport_with_n1_sm(uint8_t *nas_5g,
 
     size_t gmm_plain_len = offset_gmm;
 
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Built plain 5GMM UL NAS Transport (%zu bytes)\n", gmm_plain_len);
+    LOG_DEBUG("[UL-NAS-TRANSPORT] Built plain 5GMM UL NAS Transport (%zu bytes)\n", gmm_plain_len);
 
     // Step 3: Apply security (integrity protection)
     if (!ue_map->has_5g_nas_keys) {
-        printf("[ERROR] [UL-NAS-TRANSPORT] No 5G NAS keys available for integrity protection\n");
+        LOG_ERROR("[UL-NAS-TRANSPORT] No 5G NAS keys available for integrity protection\n");
         return -1;
     }
 
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Computing 5G uplink MAC\n");
-    printf("[DEBUG] [UL-NAS-TRANSPORT] COUNT=0x%08X, Direction=0, Bearer=1, Alg=EIA2\n",
+    LOG_DEBUG("[UL-NAS-TRANSPORT] Computing 5G uplink MAC\n");
+    LOG_DEBUG("[UL-NAS-TRANSPORT] COUNT=0x%08X, Direction=0, Bearer=1, Alg=EIA2\n",
            ue_map->nas_ul_count_5g);
 
     // Compute MAC over inner plain GMM (from EPD=0x7E), s1n2_compute_5g_uplink_mac will prepend SEQ
     uint8_t mac[4] = {0};
     int ret = s1n2_compute_5g_uplink_mac(ue_map, gmm_plain, gmm_plain_len, mac);
     if (ret != 0) {
-        printf("[ERROR] [UL-NAS-TRANSPORT] Failed to compute MAC\n");
+        LOG_ERROR("[UL-NAS-TRANSPORT] Failed to compute MAC\n");
         return -1;
     }
 
     // Sequence number (lower 8 bits of UL COUNT)
     uint8_t seq = (uint8_t)(ue_map->nas_ul_count_5g & 0xFF);
-
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Computed MAC: %02X %02X %02X %02X\n",
-           mac[0], mac[1], mac[2], mac[3]);
 
     // Step 4: Build final security-protected message
     size_t offset_final = 0;
@@ -182,17 +180,11 @@ int build_gmm_ul_nas_transport_with_n1_sm(uint8_t *nas_5g,
 
     // Increment UL COUNT
     ue_map->nas_ul_count_5g++;
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Incremented nas_ul_count_5g to 0x%08X\n",
+    LOG_DEBUG("[UL-NAS-TRANSPORT] Incremented nas_ul_count_5g to 0x%08X\n",
            ue_map->nas_ul_count_5g);
 
-    printf("[INFO] Built 5GMM UL NAS Transport with N1 SM (PSI=%u, DNN=%s, SST=%u, ReqType=%u, len=%zu)\n",
+    LOG_INFO("Built 5GMM UL NAS Transport with N1 SM (PSI=%u, DNN=%s, SST=%u, ReqType=%u, len=%zu)\n",
            pdu_session_id, dnn, sst, request_type, offset_final);
-    printf("[DEBUG] [UL-NAS-TRANSPORT] Message bytes: ");
-    for (size_t i = 0; i < (offset_final < 48 ? offset_final : 48); i++) {
-        printf("%02X ", nas_5g[i]);
-    }
-    if (offset_final > 48) printf("...");
-    printf("\n");
 
     return 0;
 }

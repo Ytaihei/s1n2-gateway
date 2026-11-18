@@ -25,25 +25,9 @@ extern s1n2_context_t g_ctx;
 /* Logging                                                            */
 /* ------------------------------------------------------------------ */
 
-static inline void log_info(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    char buffer[LOG_BUFFER_SIZE];
-    vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-    fprintf(stdout, "[INFO] %s\n", buffer);
-    fflush(stdout);
-}
-
-static inline void log_error(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    char buffer[LOG_BUFFER_SIZE];
-    vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-    fprintf(stderr, "[ERROR] %s\n", buffer);
-    fflush(stderr);
-}
+#include "s1n2_log.h"
+#define log_info(...) LOG_INFO(__VA_ARGS__)
+#define log_error(...) LOG_ERROR(__VA_ARGS__)
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                            */

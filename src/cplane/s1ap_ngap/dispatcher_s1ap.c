@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file dispatcher_s1ap.c
  * @brief S1AP message dispatcher — thin router
@@ -16,23 +17,14 @@
 
 int s1n2_handle_s1c_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
     if (len < 4) {
-        printf("[DEBUG] S1C message too short (%zd bytes)\n", len);
-        fflush(stdout);
+        LOG_DEBUG("S1C message too short (%zd bytes)\n", len);
+
         return -1;
     }
 
-    printf("[DEBUG] S1C received %zd bytes\n", len);
-    printf("[DEBUG] S1C message: %02x %02x %02x %02x\n",
-           data[0], data[1], data[2], data[3]);
+    LOG_DEBUG("S1C received %zd bytes\n", len);
 
     /* Full message hexdump for debugging */
-    printf("[HEX] S1C full message (%zd bytes): ", len);
-    for (size_t i = 0; i < len; ++i) {
-        printf("%02X ", data[i]);
-        if ((i + 1) % 16 == 0) printf("\n");
-    }
-    if (len % 16 != 0) printf("\n");
-    fflush(stdout);
 
     /* Route to message-type-specific handler */
     if (data[0] == 0x00 && data[1] == 0x11)

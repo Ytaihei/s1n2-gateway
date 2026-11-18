@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file nas_5g_to_4g.c
  * @brief Downlink NAS dispatcher: 5G (5GS) → 4G (EPS) message routing
@@ -16,6 +17,7 @@
 #include "internal/nas_conversion_internal.h"
 #include "auth/auth.h"
 #include "registration/registration.h"
+#include "registration/registration_bridge.h"
 #include "security/security.h"
 
 int convert_5g_nas_to_4g(const uint8_t *nas_5g, size_t nas_5g_len,
@@ -30,13 +32,7 @@ int convert_5g_nas_to_4g(const uint8_t *nas_5g, size_t nas_5g_len,
 		return -1;
 	}
 
-	printf("[DEBUG] Converting 5G NAS-PDU to 4G (input len=%zu)\n", nas_5g_len);
-	printf("[DEBUG] 5G NAS-PDU bytes: ");
-	for (size_t i = 0; i < nas_5g_len && i < 16; i++) {
-		printf("%02X ", nas_5g[i]);
-	}
-	if (nas_5g_len > 16) printf("...");
-	printf("\n");
+	LOG_DEBUG("Converting 5G NAS-PDU to 4G (input len=%zu)\n", nas_5g_len);
 
 	/* ---- Security header processing (delegated) ---- */
 	uint8_t decrypted_nas_buf[512];
@@ -76,24 +72,36 @@ int convert_5g_nas_to_4g(const uint8_t *nas_5g, size_t nas_5g_len,
 		if (security_cache && security_cache->has_nas_keys) {
 			uint32_t before = security_cache->nas_dl_count;
 			security_cache->nas_dl_count = (security_cache->nas_dl_count + 1) & 0xFFFFFFFFu;
-			printf("[DEBUG] [COUNT] DL NAS COUNT++ after SMC conversion: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
+			LOG_DEBUG("[COUNT] DL NAS COUNT++ after SMC conversion: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
 		}
 		return rc;
 	}
 
 	if (msg[0] != 0x7E) {
-		printf("[WARN] 5G NAS-PDU does not start with 0x7E, skipping conversion\n");
+		LOG_WARN("5G NAS-PDU does not start with 0x7E, skipping conversion\n");
 		return -1;
 	}
 
 	uint8_t security_header = msg[1];
-	printf("[DEBUG] 5G NAS header: security=0x%02X, msg_type=0x%02X\n", security_header, msg_type);
+	LOG_DEBUG("5G NAS header: security=0x%02X, msg_type=0x%02X\n", security_header, msg_type);
 
 	switch (msg_type) {
 	case 0x42: { // 5G Registration Accept -> 4G Attach Accept
 			/* EXTRACTED to registration/registration_accept_5g_to_4g.c (Phase 5) */
-			return registration_accept_convert_5g_to_4g(msg, msg_len, nas_4g, nas_4g_len, security_cache);
+			if (!security_cache) return -1;
+            if (!security_cache->has_pdu_ipv4) {
+                if (msg_len > sizeof(security_cache->pending_registration_accept)) return -1;
+                memcpy(security_cache->pending_registration_accept, msg, msg_len);
+                security_cache->pending_registration_accept_len = msg_len;
+                *nas_4g_len = 0;
+                return 1; /* Consumed: defer EPS attach until SMF provides an address. */
+            }
+            return registration_accept_convert_5g_to_4g(msg, msg_len, nas_4g, nas_4g_len, security_cache);
 		}
+        case 0x68:
+            if (s1n2_cache_pdu_address(security_cache, msg, msg_len) != 0) return -1;
+            *nas_4g_len = 0;
+            return 1;
 		case 0x56: {
 			/* Delegated to auth module (Phase 2 extraction) */
 			return auth_request_convert_5g_to_4g(msg, msg_len, nas_4g, nas_4g_len);
@@ -103,7 +111,7 @@ int convert_5g_nas_to_4g(const uint8_t *nas_5g, size_t nas_5g_len,
 			return registration_reject_convert_5g_to_4g(msg, msg_len, nas_4g, nas_4g_len);
 		}
 		default:
-			printf("[WARN] 5G NAS message type 0x%02X not supported for conversion\n", msg_type);
+			LOG_WARN("5G NAS message type 0x%02X not supported for conversion\n", msg_type);
 			return -1;
 	}
 

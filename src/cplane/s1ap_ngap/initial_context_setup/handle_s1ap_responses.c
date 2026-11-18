@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file handle_s1ap_responses.c
  * @brief ASN.1-decoded S1AP response/indication handler
@@ -20,8 +21,7 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
             S1AP_SuccessfulOutcome_t *succ = pdu_resp->choice.successfulOutcome;
             if (succ && succ->procedureCode == S1AP_ProcedureCode_id_InitialContextSetup &&
                 succ->value.present == S1AP_SuccessfulOutcome__value_PR_InitialContextSetupResponse) {
-                printf("[DEBUG] Detected S1AP InitialContextSetupResponse (successfulOutcome)\n");
-                fflush(stdout);
+                LOG_DEBUG("Detected S1AP InitialContextSetupResponse (successfulOutcome)\n");
 
                 /* Mark ICS completed for the corresponding UE mapping */
                 ue_id_mapping_t *map = s1n2_context_find_recent_security(ctx);
@@ -35,7 +35,7 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
                     map->ics_failed = false;
                     map->ics_sent = false;
                     map->ics_attempts += 1;
-                    printf("[INFO] [ICS] Marked ICS completed (ENB=%ld, MME=%ld, attempts=%d)\n",
+                    LOG_INFO("[ICS] Marked ICS completed (ENB=%ld, MME=%ld, attempts=%d)\n",
                            map->enb_ue_s1ap_id, map->mme_ue_s1ap_id, map->ics_attempts);
                 }
 
@@ -81,10 +81,10 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
                     memcpy(map_for_queue->pending_s1ap_ics, data, copy_len);
                     map_for_queue->pending_s1ap_ics_len = copy_len;
                     map_for_queue->has_pending_s1ap_ics = true;
-                    printf("[INFO] [ICS] Cached S1AP InitialContextSetupResponse (%zu bytes), waiting for AMF ICS Request with QFI\n", copy_len);
+                    LOG_INFO("[ICS] Cached S1AP InitialContextSetupResponse (%zu bytes), waiting for AMF ICS Request with QFI\n", copy_len);
 
                     if (map_for_queue->amf_ics_requested && map_for_queue->qfi > 0) {
-                        printf("[INFO] [ICS] AMF ICS Request already received (QFI=%u); converting and sending NGAP ICS Response now\n", map_for_queue->qfi);
+                        LOG_INFO("[ICS] AMF ICS Request already received (QFI=%u); converting and sending NGAP ICS Response now\n", map_for_queue->qfi);
                         uint8_t ngap_data[512];
                         size_t ngap_len = sizeof(ngap_data);
                         if (s1n2_convert_initial_context_setup_response(map_for_queue->pending_s1ap_ics,
@@ -93,19 +93,19 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
                             ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_data, (size_t)ngap_len,
                                                         NULL, 0, htonl(60), 0, 0, 0, 0);
                             if (sent == (ssize_t)ngap_len) {
-                                printf("[INFO] InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
+                                LOG_INFO("InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
                                 map_for_queue->has_pending_s1ap_ics = false;
                                 map_for_queue->pending_s1ap_ics_len = 0;
                             } else {
-                                printf("[WARN] Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
+                                LOG_WARN("Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
                                        sent, errno, strerror(errno));
                             }
                         } else {
-                            printf("[ERROR] Failed to convert cached S1AP ICS Response to NGAP\n");
+                            LOG_ERROR("Failed to convert cached S1AP ICS Response to NGAP\n");
                         }
-                        fflush(stdout);
+
                     } else {
-                        printf("[INFO] [ICS] Waiting for AMF InitialContextSetupRequest to extract QFI before NGAP conversion\n");
+                        LOG_INFO("[ICS] Waiting for AMF InitialContextSetupRequest to extract QFI before NGAP conversion\n");
                     }
                 } else {
                     /* Fallback: if no UE map, convert and send immediately (legacy behavior) */
@@ -115,46 +115,46 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
                         ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_data, (size_t)ngap_len,
                                                     NULL, 0, htonl(60), 0, 0, 0, 0);
                         if (sent == (ssize_t)ngap_len) {
-                            printf("[INFO] InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
+                            LOG_INFO("InitialContextSetupResponse -> NGAP InitialContextSetupResponse sent (%zd bytes, PPID=60)\n", sent);
                         } else {
-                            printf("[WARN] Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
+                            LOG_WARN("Failed to send NGAP InitialContextSetupResponse via SCTP (ret=%zd, PPID=60, errno=%d: %s)\n",
                                    sent, errno, strerror(errno));
                         }
                     }
-                    fflush(stdout);
+
                 }
                 ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, pdu_resp);
                 return 0;
             }
             /* UEContextReleaseComplete as successfulOutcome for procedure UEContextRelease */
             if (succ && succ->procedureCode == S1AP_ProcedureCode_id_UEContextRelease) {
-                printf("[INFO] Detected S1AP UEContextReleaseComplete (successfulOutcome)\n");
+                LOG_INFO("Detected S1AP UEContextReleaseComplete (successfulOutcome)\n");
                 ue_id_mapping_t *map = s1n2_context_find_recent_security(ctx);
                 if (map) {
                     map->ics_sent = false;
                     map->ics_completed = false;
                     map->ics_failed = false;
                     map->ics_e_rab_id = 0;
-                    printf("[INFO] [ICS] Reset ICS state due to UEContextReleaseComplete (ENB=%ld)\n", map->enb_ue_s1ap_id);
+                    LOG_INFO("[ICS] Reset ICS state due to UEContextReleaseComplete (ENB=%ld)\n", map->enb_ue_s1ap_id);
                 }
-                fflush(stdout);
+
                 ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, pdu_resp);
                 return 0;
             }
         } else if (pdu_resp->present == S1AP_S1AP_PDU_PR_unsuccessfulOutcome) {
             S1AP_UnsuccessfulOutcome_t *unsucc = pdu_resp->choice.unsuccessfulOutcome;
             if (unsucc && unsucc->procedureCode == S1AP_ProcedureCode_id_InitialContextSetup) {
-                printf("[WARN] Detected S1AP InitialContextSetupFailure (unsuccessfulOutcome)\n");
+                LOG_WARN("Detected S1AP InitialContextSetupFailure (unsuccessfulOutcome)\n");
                 ue_id_mapping_t *map = s1n2_context_find_recent_security(ctx);
                 if (map) {
                     map->ics_failed = true;
                     map->ics_sent = false;
                     map->ics_completed = false;
                     map->ics_attempts += 1;
-                    printf("[INFO] [ICS] Marked ICS failed (ENB=%ld, MME=%ld, attempts=%d)\n",
+                    LOG_INFO("[ICS] Marked ICS failed (ENB=%ld, MME=%ld, attempts=%d)\n",
                            map->enb_ue_s1ap_id, map->mme_ue_s1ap_id, map->ics_attempts);
                 }
-                fflush(stdout);
+
                 ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, pdu_resp);
                 return 0;
             }
@@ -195,14 +195,8 @@ int s1ap_dispatch_asn1_responses(s1n2_context_t *ctx, uint8_t *data, size_t len)
     if (pdu_resp) ASN_STRUCT_FREE(asn_DEF_S1AP_S1AP_PDU, pdu_resp);
 
     /* Unknown S1AP message — log and discard */
-    printf("[WARN] Unknown S1AP message type: %02x %02x (procedure code %d, len=%zd)\n",
+    LOG_WARN("Unknown S1AP message type: %02x %02x (procedure code %d, len=%zd)\n",
            data[0], data[1], data[1], len);
-    printf("[HEX] Unknown S1AP message (%zd bytes): ", len);
-    for (size_t i = 0; i < len && i < 64; ++i) {
-        printf("%02X ", data[i]);
-        if ((i + 1) % 16 == 0) printf("\n");
-    }
-    if (len % 16 != 0) printf("\n");
-    fflush(stdout);
+
     return 0;
 }
