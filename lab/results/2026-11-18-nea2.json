@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-11-18T09:51:57.145804+00:00",
+  "profile": {
+    "ciphering": "NEA2",
+    "integrity": "NIA2",
+    "ue_subnet": "10.46.0.0/24",
+    "gateway": "10.46.0.1",
+    "ue_ip": "10.46.0.2"
+  },
+  "checks": {
+    "s1_setup_response_sent": true,
+    "security_mode_complete_converted": true,
+    "amf_registration_complete": true,
+    "ue_attached": true,
+    "ue_expected_ip": true,
+    "smf_expected_ip": true,
+    "upf_expected_ip": true,
+    "ue_to_upf": true,
+    "upf_to_ue": true
+  },
+  "ping": {
+    "ue_to_upf": {
+      "exit_code": 0,
+      "transmitted": 5,
+      "received": 5,
+      "loss_percent": 0.0
+    },
+    "upf_to_ue": {
+      "exit_code": 0,
+      "transmitted": 5,
+      "received": 5,
+      "loss_percent": 0.0
+    }
+  },
+  "passed": true
+}

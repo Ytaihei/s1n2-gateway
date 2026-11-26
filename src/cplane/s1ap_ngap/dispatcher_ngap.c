@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file dispatcher_ngap.c
  * @brief NGAP message dispatcher
@@ -19,21 +20,15 @@ int s1n2_handle_n2_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
     }
 
     // Debug dump of inbound N2/NGAP message
-    printf("[DEBUG] N2 received %zu bytes\n", len);
-    size_t dump = len < 32 ? len : 32;
-    printf("[DEBUG] N2 bytes: ");
-    for (size_t i = 0; i < dump; ++i) {
-        printf("%02x%s", data[i], (i + 1 < dump) ? " " : "\n");
-    }
-    fflush(stdout);
+    LOG_DEBUG("N2 received %zu bytes\n", len);
 
     int handled = 0;
     NGAP_NGAP_PDU_t *ngpdu = NULL;
     asn_dec_rval_t ndr = aper_decode_complete(NULL, &asn_DEF_NGAP_NGAP_PDU, (void**)&ngpdu, data, len);
     if (ndr.code != RC_OK || !ngpdu) {
         const char *rc = (ndr.code==RC_OK)?"RC_OK":(ndr.code==RC_FAIL?"RC_FAIL":(ndr.code==RC_WMORE?"RC_WMORE":"RC_UNKNOWN"));
-        printf("[WARN] NGAP decode failed or incomplete: result=%s consumed=%zu\n", rc, (size_t)ndr.consumed);
-        fflush(stdout);
+        LOG_WARN("NGAP decode failed or incomplete: result=%s consumed=%zu\n", rc, (size_t)ndr.consumed);
+
         goto cleanup;
     }
 
@@ -42,11 +37,11 @@ int s1n2_handle_n2_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
         if (succ && succ->value.present == NGAP_SuccessfulOutcome__value_PR_NGSetupResponse) {
             NGAP_NGSetupResponse_t *rsp = &succ->value.choice.NGSetupResponse;
             int ie_count = rsp->protocolIEs.list.count;
-            printf("[INFO] NGSetupResponse decoded: IE count=%d\n", ie_count);
+            LOG_INFO("NGSetupResponse decoded: IE count=%d\n", ie_count);
             for (int i = 0; i < ie_count && i < 8; ++i) {
                 NGAP_NGSetupResponseIEs_t *ie = rsp->protocolIEs.list.array[i];
                 if (!ie) continue;
-                printf("[INFO] NGSetupResponse IE[%d]: id=%ld\n", i, (long)ie->id);
+                LOG_INFO("NGSetupResponse IE[%d]: id=%ld\n", i, (long)ie->id);
             }
 
             uint8_t s1ap_data[1024];
@@ -54,8 +49,8 @@ int s1n2_handle_n2_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
 
             if (s1n2_convert_ngsetup_to_s1setup(data, len, s1ap_data, &s1ap_len) == 0) {
                 if (ctx->s1c_fd <= 0) {
-                    printf("[WARN] S1C connection closed, cannot send S1SetupResponse\n");
-                    fflush(stdout);
+                    LOG_WARN("S1C connection closed, cannot send S1SetupResponse\n");
+
                     goto cleanup;
                 }
 
@@ -71,16 +66,16 @@ int s1n2_handle_n2_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
         NGAP_InitiatingMessage_t *init = ngpdu->choice.initiatingMessage;
         if (init && init->procedureCode == NGAP_ProcedureCode_id_DownlinkNASTransport &&
             init->value.present == NGAP_InitiatingMessage__value_PR_DownlinkNASTransport) {
-            printf("[DEBUG] NGAP DownlinkNASTransport detected (proc=0x%lX)\n", (long)init->procedureCode);
-            fflush(stdout);
+            LOG_DEBUG("NGAP DownlinkNASTransport detected (proc=0x%lX)\n", (long)init->procedureCode);
 
             uint8_t s1ap_data[1024];
             size_t s1ap_len = sizeof(s1ap_data);
 
             if (s1n2_convert_ngap_downlink_nas_transport(ctx, data, len, s1ap_data, &s1ap_len) == 0) {
+                if (s1ap_len == 0) { handled = 1; goto cleanup; }
                 if (ctx->s1c_fd <= 0) {
-                    printf("[WARN] S1C connection closed, cannot forward DownlinkNASTransport\n");
-                    fflush(stdout);
+                    LOG_WARN("S1C connection closed, cannot forward DownlinkNASTransport\n");
+
                     goto cleanup;
                 }
 

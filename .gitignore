@@ -33,3 +33,9 @@ open5gs_lib/ngap/
 # === OS ===
 .DS_Store
 Thumbs.db
+
+# Isolated synthetic integration lab outputs
+lab/runtime/
+lab/sources/
+__pycache__/
+lab/runtime-history/

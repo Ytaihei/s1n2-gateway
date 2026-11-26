@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file registration/registration_accept_5g_to_4g.c
  * @brief 5G Registration Accept (0x42) → 4G Attach Accept (0x42)
@@ -28,8 +29,9 @@
 int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
                                          uint8_t *nas_4g, size_t *nas_4g_len,
                                          ue_id_mapping_t *security_cache) {
+    if (!msg || !nas_4g || !nas_4g_len || !security_cache || !security_cache->has_pdu_ipv4) return -1;
 	// We likely cannot decrypt 5G NAS here (downlink usually ciphered). Synthesize minimal 4G Accept.
-	printf("[INFO] Converting 5G Registration Accept (0x42) -> 4G Attach Accept (0x42) [minimal]\n");
+	LOG_INFO("Converting 5G Registration Accept (0x42) -> 4G Attach Accept (0x42) [minimal]\n");
 	if (security_cache) {
 		s1n2_cache_registration_accept_artifacts(security_cache, msg, msg_len);
 		s1n2_context_mark_tau_complete(security_cache);
@@ -52,7 +54,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 	size_t off_esm = 0;
 	size_t out_capacity = (cap < sizeof(out)) ? cap : sizeof(out);
 	if (out_capacity < 32) {
-		printf("[WARN] Output buffer capacity seems too small (%zu bytes)\n", out_capacity);
+		LOG_WARN("Output buffer capacity seems too small (%zu bytes)\n", out_capacity);
 	}
 
 	out[out_off++] = 0x07; // EPS MM PD, plain
@@ -76,7 +78,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 	// Format: V (value-only, no IEI) - single byte GPRS timer value
 	off_t3412 = out_off; // mark position (but we're not adding it)
 	out[out_off++] = 0x29; // GPRS Timer value: unit=001(1min), value=01001(9) = 9 minutes
-	printf("[TRACE] AA T3412: value=0x29 (9 minutes, V format)\n");
+	LOG_TRACE("AA T3412: value=0x29 (9 minutes, V format)\n");
 
 	// TAI list - TS 24.301 Attach Accept: MANDATORY IE, format LV (no IEI, just length+value)
 	// Successful trace shows: len(1 byte) + value(6 bytes) = 06 40 00 f1 10 00 01
@@ -92,22 +94,14 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 	// TAC (2 bytes big-endian)
 	out[out_off++] = (uint8_t)((tac >> 8) & 0xFF);
 	out[out_off++] = (uint8_t)(tac & 0xFF);
-	printf("[TRACE] AA TAI at off=%zu (LV, no IEI): len=%u, type/num=%02X, PLMN=%02X%02X%02X, TAC=%02X%02X\n",
-	       off_tai, 6U,
-	       out[off_tai+1], out[off_tai+2], out[off_tai+3], out[off_tai+4],
-	       out[off_tai+5], out[off_tai+6]);
+
 	if (out_off > out_capacity) {
-		printf("[ERROR] Output staging buffer overflow for Attach Accept (need %zu, cap %zu)\n", out_off, out_capacity);
+		LOG_ERROR("Output staging buffer overflow for Attach Accept (need %zu, cap %zu)\n", out_off, out_capacity);
 		return -1;
 	}
 
-	printf("[INFO] Built base 4G Attach Accept (len=%zu, MCC=%c%c%c, MNC=%s, TAC=0x%04X)\n",
+	LOG_INFO("Built base 4G Attach Accept (len=%zu, MCC=%c%c%c, MNC=%s, TAC=0x%04X)\n",
 	   out_off, mcc[0], mcc[1], mcc[2], mnc, tac);
-	printf("[DEBUG] 4G Attach Accept (pre-ESM) bytes: ");
-	for (size_t i = 0; i < out_off && i < 64; ++i) printf("%02X ", out[i]);
-	if (out_off > 64) printf("...");
-	printf("\n");
-	fflush(stdout);
 
 	// Add ESM message container (IEI=0x78) with minimal Activate default EPS bearer context request (0xC1)
 	// Build minimal ESM Activate Default EPS Bearer Context Request
@@ -125,7 +119,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 		if (esm_len + security_cache->cached_esm_pdn_request_len <= sizeof(esm)) {
 			memcpy(esm + esm_len, security_cache->cached_esm_pdn_request, security_cache->cached_esm_pdn_request_len);
 			esm_len += security_cache->cached_esm_pdn_request_len;
-			printf("[INFO] Prepended cached ESM PDN connectivity request (len=%u)\n",
+			LOG_INFO("Prepended cached ESM PDN connectivity request (len=%u)\n",
 			       security_cache->cached_esm_pdn_request_len);
 			const uint8_t *pco_ptr = NULL;
 			uint8_t pco_len = 0;
@@ -180,8 +174,9 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 	// Successful trace: 05 01 c0 a8 64 02 (len=5, type=IPv4, address)
 	esm[esm_len++] = 0x05; // len = 1 (PDN type octet) + 4 (IPv4)
 	esm[esm_len++] = 0x01; // PDN type = IPv4
-	// Example: 192.168.100.2
-	esm[esm_len++] = 0xC0; esm[esm_len++] = 0xA8; esm[esm_len++] = 0x64; esm[esm_len++] = 0x02;
+	// Use the address allocated by the SMF for this UE.
+    memcpy(esm + esm_len, security_cache->pdu_ipv4, 4);
+    esm_len += 4;
 
 	// PCO (Protocol Configuration Options) - OPTIONAL IE, IEI=0x27
 	// Successful trace includes: 27 06 80 00 10 02 01 00 -> modified to: 5e 06 fe fe fa fa 02 02
@@ -195,7 +190,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 		esm[esm_len++] = 0xFA;
 		esm[esm_len++] = 0x02;
 		esm[esm_len++] = 0x02;
-		printf("[INFO] Added PCO (8 bytes: 5e 06 fe fe fa fa 02 02) matching successful trace\n");
+
 	}
 
 	// Now wrap in ESM message container in Attach Accept
@@ -208,21 +203,19 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 		memcpy(out + out_off, esm, esm_len);
 		off_esm = out_off; // 記録: ESM中身の開始位置
 		out_off += esm_len;
-		printf("[INFO] Appended ESM container (2-byte length) with Activate default EPS bearer request (len=%zu, APN=%s)\n", esm_len, apn_str);
+		LOG_INFO("Appended ESM container (2-byte length) with Activate default EPS bearer request (len=%zu, APN=%s)\n", esm_len, apn_str);
 		// 詳細トレース: ESM container先頭部
 		{
-			printf("[TRACE] ESM payload at off=%zu: ", off_esm);
-			for (size_t i = 0; i < esm_len && i < 24; ++i) printf("%02X ", out[off_esm + i]);
-			printf("\n");
+
 		}
 	} else {
-		printf("[WARN] Not enough space to append ESM container to Attach Accept (need tail=%zu, cap=%zu)\n",
+		LOG_WARN("Not enough space to append ESM container to Attach Accept (need tail=%zu, cap=%zu)\n",
 			(2UL + esm_len), out_capacity - out_off);
 	}
 
 	// Finalize: copy to caller buffer
 	if (out_off > cap) {
-		printf("[ERROR] Caller buffer too small for final Attach Accept (need %zu, have %zu)\n", out_off, cap);
+		LOG_ERROR("Caller buffer too small for final Attach Accept (need %zu, have %zu)\n", out_off, cap);
 		return -1;
 	}
 	// If we have 4G NAS keys and security context, wrap Attach Accept with NAS security
@@ -235,7 +228,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 		uint8_t eia_sel = security_cache->selected_nas_security_alg & 0x07;          // Bits 2-0
 		uint8_t eea_sel = (security_cache->selected_nas_security_alg >> 4) & 0x07;   // Bits 6-4
 
-		printf("[DEBUG] [ATTACH-ACCEPT] Security algorithm selection: selected_nas_security_alg=0x%02X, EEA=%u, EIA=%u\n",
+		LOG_DEBUG("[ATTACH-ACCEPT] Security algorithm selection: selected_nas_security_alg=0x%02X, EEA=%u, EIA=%u\n",
 		       security_cache->selected_nas_security_alg, eea_sel, eia_sel);
 
 		s1n2_nas_integrity_alg_t alg = S1N2_NAS_EIA2;
@@ -250,7 +243,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 		uint8_t seq = (uint8_t)(count_dl & 0xFF);
 		uint8_t mac_input[1 + 384];
 		if (out_off > 384) {
-			printf("[WARN] Attach Accept too large (%zu) for MAC input staging, sending plain\n", out_off);
+			LOG_WARN("Attach Accept too large (%zu) for MAC input staging, sending plain\n", out_off);
 		} else {
 			// Attempt encryption only if negotiated EEA != 0 (EEA0 = no ciphering)
 			//  - eea_sel == 0: encryption disabled by SMC -> integrity-only (0x17)
@@ -266,7 +259,7 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 				if (s1n2_nas_encrypt(enc_alg, security_cache->k_nas_enc, count_dl, 0 /*bearer*/, 1 /*DL*/, out, out_off, cipher) == 0) {
 					enc_ok = true;
 				} else {
-					printf("[WARN] NAS EEA%u encryption failed, will fallback to integrity-only\n", eea_sel);
+					LOG_WARN("NAS EEA%u encryption failed, will fallback to integrity-only\n", eea_sel);
 				}
 			} // if EEA0 negotiated, leave enc_ok=false to select integrity-only path
 
@@ -284,19 +277,19 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 						memcpy(nas_4g + w, cipher, out_off); w += out_off;
 						*nas_4g_len = w;
 						wrapped = true;
-						printf("[INFO] Wrapped Attach Accept with NAS cipher+integrity (EEA=%u,EIA=%u, COUNT-DL=0x%08X, SEQ=%u)\n",
+						LOG_INFO("Wrapped Attach Accept with NAS cipher+integrity (EEA=%u,EIA=%u, COUNT-DL=0x%08X, SEQ=%u)\n",
 						   eea_sel, eia_sel, count_dl, seq);
-						printf("[DEBUG] MAC=%02X %02X %02X %02X\n", mac[0], mac[1], mac[2], mac[3]);
+
 						uint32_t before = security_cache->nas_dl_count;
 						security_cache->nas_dl_count = (security_cache->nas_dl_count + 1) & 0xFFFFFFFFu;
-						printf("[DEBUG] [COUNT] DL NAS COUNT++ after Attach Accept: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
-						printf("[TRACE] AA IE map (protected+ciph): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
+						LOG_DEBUG("[COUNT] DL NAS COUNT++ after Attach Accept: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
+						LOG_TRACE("AA IE map (protected+ciph): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
 						       off_attach_result, out[off_attach_result], off_t3412, off_tai, off_esm, (size_t)0);
 					} else {
-						printf("[WARN] Output buffer too small to wrap cipher+integrity (need %zu, have %zu)\n", needed, cap);
+						LOG_WARN("Output buffer too small to wrap cipher+integrity (need %zu, have %zu)\n", needed, cap);
 					}
 				} else {
-					printf("[WARN] Failed to compute NAS MAC over ciphered payload, falling back to integrity-only\n");
+					LOG_WARN("Failed to compute NAS MAC over ciphered payload, falling back to integrity-only\n");
 				}
 			}
 
@@ -313,19 +306,19 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 						memcpy(nas_4g + w, out, out_off); w += out_off;
 						*nas_4g_len = w;
 						wrapped = true;
-						printf("[INFO] Wrapped Attach Accept with NAS integrity (fallback or EEA0-negotiated) (EEA=%u,EIA=%u, COUNT-DL=0x%08X, SEQ=%u)\n",
+						LOG_INFO("Wrapped Attach Accept with NAS integrity (fallback or EEA0-negotiated) (EEA=%u,EIA=%u, COUNT-DL=0x%08X, SEQ=%u)\n",
 						   eea_sel, eia_sel, count_dl, seq);
-						printf("[DEBUG] MAC=%02X %02X %02X %02X\n", mac[0], mac[1], mac[2], mac[3]);
+
 						uint32_t before = security_cache->nas_dl_count;
 						security_cache->nas_dl_count = (security_cache->nas_dl_count + 1) & 0xFFFFFFFFu;
-						printf("[DEBUG] [COUNT] DL NAS COUNT++ after Attach Accept: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
-						printf("[TRACE] AA IE map (protected): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
+						LOG_DEBUG("[COUNT] DL NAS COUNT++ after Attach Accept: 0x%08X -> 0x%08X\n", before, security_cache->nas_dl_count);
+						LOG_TRACE("AA IE map (protected): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
 						       off_attach_result, out[off_attach_result], off_t3412, off_tai, off_esm, (size_t)0);
 					} else {
-						printf("[WARN] Output buffer too small to wrap integrity (need %zu, have %zu)\n", needed, cap);
+						LOG_WARN("Output buffer too small to wrap integrity (need %zu, have %zu)\n", needed, cap);
 					}
 				} else {
-					printf("[WARN] Failed to compute NAS MAC for Attach Accept (fallback), sending plain\n");
+					LOG_WARN("Failed to compute NAS MAC for Attach Accept (fallback), sending plain\n");
 				}
 			}
 		}
@@ -334,16 +327,12 @@ int registration_accept_convert_5g_to_4g(const uint8_t *msg, size_t msg_len,
 	if (!wrapped) {
 		memcpy(nas_4g, out, out_off);
 		*nas_4g_len = out_off;
-		printf("[INFO] Built 4G Attach Accept (final len=%zu) [plain]\n", out_off);
-		printf("[TRACE] AA IE map (plain): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
+		LOG_INFO("Built 4G Attach Accept (final len=%zu) [plain]\n", out_off);
+		LOG_TRACE("AA IE map (plain): attach_result@%zu=%02X, t3412@%zu, tai@%zu, esm@%zu len~%zu\n",
 		       off_attach_result, out[off_attach_result], off_t3412, off_tai, off_esm, (size_t)0);
 	} else {
-		printf("[DEBUG] 4G Attach Accept (integrity-wrapped) bytes head: ");
-		for (size_t i = 0; i < *nas_4g_len && i < 96; ++i) printf("%02X ", nas_4g[i]);
-		if (*nas_4g_len > 96) printf("...");
-		printf("\n");
+
 	}
-	fflush(stdout);
 
 	(void)apn_strlen; /* suppress unused-variable warning */
 

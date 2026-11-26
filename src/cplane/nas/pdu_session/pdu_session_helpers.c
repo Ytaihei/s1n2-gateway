@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file pdu_session/pdu_session_helpers.c
  * @brief PDU Session helper functions
@@ -87,8 +88,8 @@ uint16_t s1n2_build_pdu_session_status_mask(s1n2_context_t *ctx,
 	ue_id_mapping_t *source = s1n2_find_session_mapping(ctx, ue_map);
 	if (!s1n2_has_active_pdu_context(source)) {
 		if (ue_map) {
-			printf("[DEBUG] No active PDU context found for UE (ENB=%ld)\n", ue_map->enb_ue_s1ap_id);
-			fflush(stdout);
+			LOG_DEBUG("No active PDU context found for UE (ENB=%ld)\n", ue_map->enb_ue_s1ap_id);
+
 		}
 		return 0;
 	}
@@ -105,20 +106,20 @@ uint16_t s1n2_build_pdu_session_status_mask(s1n2_context_t *ctx,
 			ue_map->has_last_access_type = true;
 			ue_map->last_5gs_access_type = source->last_5gs_access_type;
 		}
-		printf("[DEBUG] Using cached UE mapping (ENB=%ld) for PDU Session Status (PSI=%u)\n",
+		LOG_DEBUG("Using cached UE mapping (ENB=%ld) for PDU Session Status (PSI=%u)\n",
 		       source->enb_ue_s1ap_id, source->pdu_session_id);
-		fflush(stdout);
+
 	}
 	uint8_t psi = s1n2_infer_active_pdu_session_id(source);
 	if (psi < 1 || psi > 15) {
-		printf("[WARN] Unable to encode PDU Session Status (psi=%u out of range)\n", psi);
-		fflush(stdout);
+		LOG_WARN("Unable to encode PDU Session Status (psi=%u out of range)\n", psi);
+
 		return 0;
 	}
 	uint16_t mask = (uint16_t)(1u << psi);
-	printf("[DEBUG] Built PDU Session Status mask from psi=%u (mask=0x%04X)\n",
+	LOG_DEBUG("Built PDU Session Status mask from psi=%u (mask=0x%04X)\n",
 		psi, mask);
-	fflush(stdout);
+
 	return mask;
 }
 
@@ -130,7 +131,7 @@ int s1n2_append_pdu_session_status(uint8_t *nas,
 		return -1;
 	}
 	if ((*offset) + 4 > capacity) {
-		printf("[ERROR] Not enough space to append PDU Session Status IE\n");
+		LOG_ERROR("Not enough space to append PDU Session Status IE\n");
 		return -1;
 	}
 	nas[(*offset)++] = S1N2_5GS_IEI_PDU_SESSION_STATUS;
@@ -143,8 +144,8 @@ int s1n2_append_pdu_session_status(uint8_t *nas,
 	 */
 	nas[(*offset)++] = lsb;
 	nas[(*offset)++] = msb;
-	printf("[TRACE] Encoded PDU Session Status IE (mask=0x%04X, bytes=%02X %02X)\n",
+	LOG_TRACE("Encoded PDU Session Status IE (mask=0x%04X, bytes=%02X %02X)\n",
 	       status_mask, lsb, msb);
-	fflush(stdout);
+
 	return 0;
 }

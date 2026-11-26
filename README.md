@@ -1,203 +1,173 @@
-# What is s1n2-gateway
+# s1n2-gateway
 
-4G eNBを5GCに対して接続するためのプロトコル変換器。
+4G eNB を 5G Core に接続するためのプロトコル変換器。
+C-Plane は S1AP ↔ NGAP と NAS PDU 内の EPS ↔ 5GS を変換し、
+U-Plane は GTP-U ヘッダーの TEID を書き換えて中継する。
 
-## 検証済ハードウェア
-
-| 項目 | 仕様 |
-|---|---|
-| **ホストマシン** | Intel NUC7i7BNH |
-| **eNB(基地局)** | Baicells Nova430x (sXGP対応 4G基地局) |
-| **UE(端末)** | Google Pixel 8a |
-
-> **NOTE**: eNB の詳細設定は [Wiki: eNB Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eNB-Setup-Guide) を参照。
-> eSIM の登録・設定手順は [Wiki: eSIM Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eSIM-Setup-Guide) を参照。
-> Simlessly の操作手順は公式マニュアルも参照: https://docs.simlessly.com/rsp/user-manual/simlessly/simlessly.html
-
-## 前提ソフトウェア
-
-| ソフトウェア | 最低バージョン |
-|---|---|
-| OS | Ubuntu 22.04 LTS |
-| Docker Engine | 24+ |
-| Docker Compose | v2 |
-
-ビルドツール・ライブラリのインストールは不要 (Dockerfile 内で自動取得)。
-
-## Quick Start
-
-```
-1. リポジトリ配置    → 下記「リポジトリの配置」
-2. .env 設定         → 下記「環境変数の設定」
-3. 加入者登録        → Open5GS WebUI + auth_keys.yaml（Wiki: eSIM Setup Guide）
-4. eNB 設定          → MCC/MNC/TAC・S1接続先を合わせる（Wiki: eNB Setup Guide）
-5. 端末 eSIM/APN設定 → Wiki: eSIM Setup Guide
-6. ビルド＆起動      → 下記「ビルド・実行」
+```text
+eNB ──S1AP/GTP-U──► s1n2-converter ──NGAP/GTP-U──► AMF / UPF
+         (4G)            ↕ NAS 変換            (5G)
 ```
 
-## リポジトリの配置
+## 開発を始める
 
-本リポジトリは [open5gs-compose](https://github.com/Ytaihei/open5gs-compose)（Open5GS 簡易 Docker 環境）のサブディレクトリとして動作する。
-`docker-compose.yml` は親ディレクトリの資材を参照する（例: `../config/5g`, `../webui`, `../log`, `base/Dockerfile`）。
-以下の手順で配置すること。
+単体のビルドには Docker Engine が必要。C のビルドツールとライブラリは
+Dockerfile 内で取得する。親リポジトリ、`.env`、認証鍵、実機はビルドには不要。
+初回ビルドには Ubuntu パッケージと Open5GS を取得するネットワーク接続が必要。
 
 ```bash
-# 1. 親リポジトリをクローン
-git clone https://github.com/Ytaihei/open5gs-compose.git
-cd open5gs-compose
-
-# 2. 本リポジトリを s1n2-gateway/ ディレクトリにクローン
 git clone https://github.com/Ytaihei/s1n2-gateway.git
 cd s1n2-gateway
+docker build --tag s1n2-gateway:dev .
 ```
 
-最終的なディレクトリ構成：
+この手順はイメージのビルドのみを行う。GitHub Actions もビルドのみを検証し、
+eNB・UE との接続や通信は検証しない。
+開発用の Make ターゲットと検証の範囲は [DEVELOPMENT.md](DEVELOPMENT.md) を参照。
 
-```
-open5gs-compose/                  ← 親リポジトリ (Open5GS Docker環境)
-├── base/                     ← Open5GS ベース Dockerfile
-├── config/
-│   └── 5g/                   ← 5G NF 設定ファイル (AMF, SMF, UPF, ...)
-├── webui/                    ← Open5GS WebUI 初期化資材
-├── log/                      ← Open5GS ログ出力先
-├── script/
-│   └── exclusive_mode.sh     ← 排他制御の共通関数
-└── s1n2-gateway/                  ← 本リポジトリ
-    ├── docker-compose.yml
-    ├── Dockerfile
-    ├── .env                  ← .env.example からコピーして作成（Git管理外）
-    ├── config/
-    │   └── auth_keys.yaml    ← auth_keys.example.yaml からコピーして作成（Git管理外）
-    └── src/                  ← s1n2-converter ソースコード
-```
+## リポジトリ構成
 
-`start.sh` はローカル運用用の補助スクリプト（Git管理外）として扱う。
+| パス | 役割 |
+|---|---|
+| `src/app/` | 起動、設定読み込み、イベントループ |
+| `src/context/` | UE コンテキスト管理 |
+| `src/cplane/s1ap_ngap/` | S1AP / NGAP のメッセージ振り分けと変換 |
+| `src/cplane/nas/` | 登録・認証・セキュリティ・TAU・PDU セッションの NAS 変換 |
+| `src/auth_module/` | 認証設定、加入者情報、Milenage、鍵導出 |
+| `src/transport/` | SCTP / UDP トランスポート |
+| `src/uplane/` | GTP-U トンネル管理と転送 |
+| `src/utils/` | 共通ユーティリティ |
+| `include/`, `include/internal/` | 共通ヘッダーと内部インターフェース |
+| `include/s1ap/` | 同梱された ASN.1 生成コード |
+| `config/auth_keys.example.yaml` | 認証設定のテンプレート |
+| `lab/` | 合成加入者と仮想eNB・UEによる、明示実行の相互接続試験 |
+| `scripts/check-remote-status.sh` | 認可された実機環境の読み取り専用事前確認 |
+| `Dockerfile`, `Makefile` | 単体ビルド |
+| `docker-compose.yml` | 親リポジトリに依存する統合構成 |
 
-## 互換性ポリシー
+`open5gs/`（ビルド時に取得）と `build/`（生成物）は Git 管理外。
+`include/s1ap/` は生成コードのため、手書き実装の整理・一括整形の対象に含めない。
 
-- `open5gs-compose` 側の `s1n2-gateway` submodule で固定されるコミットを、統合運用の正とする。
-- `s1n2-gateway` 単体の `main` は、常に親の最新 `main` と互換とは限らない。
-- 統合運用時は、親リポジトリを `git clone --recursive` で取得し、親が指す submodule コミットを使う。
+## 統合環境の準備
 
-## Start s1n2-Gateway
+実行には [open5gs-compose](https://github.com/Ytaihei/open5gs-compose) 由来の
+指定された親リポジトリが必要。`docker-compose.yml` は親の `base/Dockerfile`、
+`config/5g/`、`webui/`、`log/` を参照するため、このリポジトリ単体では起動できない。
 
-### 環境変数の設定
+### 互換性と配置
 
-`.env.example` をコピーして `.env` を作成する。
+統合運用では、親リポジトリが submodule として固定するコミットを使う。
+本リポジトリの `main` と親の最新ブランチの互換性は保証しない。
+指定の統合リポジトリを利用する場合は、その URL とブランチに合わせること。
 
 ```bash
-cp .env.example .env
+# 新規取得時: 親が指定する submodule コミットも取得する
+git clone --recurse-submodules https://github.com/Ytaihei/open5gs-compose.git
+cd open5gs-compose
+
+# 統合作業の前に親・子の状態と正確なコミットを記録する
+git status --short --branch
+git rev-parse HEAD
+git submodule status -- s1n2-gateway
+git -C s1n2-gateway status --short --branch
+git -C s1n2-gateway rev-parse HEAD
 ```
 
-通常はデフォルト値のまま動作する。変更が必要な場合の主要変数：
+既存の運用環境では、先に状態を確認し、親の submodule 固定値を維持する。
+親の下で本リポジトリを別途 clone したり、子だけを最新 `main` に更新したりしない。
 
-| 変数 | デフォルト | 説明 |
+```text
+open5gs-compose/
+├── base/Dockerfile
+├── config/5g/
+├── webui/
+├── log/
+└── s1n2-gateway/           # 親が固定する submodule
+    ├── docker-compose.yml
+    ├── .env               # ローカル設定（Git 管理外）
+    └── config/auth_keys.yaml  # 認証鍵（Git 管理外）
+```
+
+### 設定ファイル
+
+新規環境では `s1n2-gateway/` 内でテンプレートをコピーする。
+既存ファイルを上書きしないよう、以下では `-n` を付けている。
+
+```bash
+cp -n .env.example .env
+cp -n config/auth_keys.example.yaml config/auth_keys.yaml
+```
+
+`.env` の主要変数は以下のとおり。テンプレートの値を実機環境と照合する。
+
+| 変数 | テンプレート値 | 説明 |
 |---|---|---|
-| `MCC` / `MNC` / `TAC` | `001` / `01` / `1` | PLMN・TAC（eNB側の設定と一致させる） |
-| `UE_IPV4_INTERNET` | `192.168.100.0/24` | UE に割り当てる IP プール |
+| `MCC` / `MNC` / `TAC` | `001` / `01` / `1` | eNB と一致させる PLMN・TAC |
+| `UE_IPV4_INTERNET` | `192.168.100.0/24` | UE の IP プール |
 | `MAX_NUM_UE` | `1024` | 最大 UE 数 |
 
-### ローカル専用スクリプト
+`S1C_BIND_ADDR`、`N2_REMOTE_ADDR` などは `docker-compose.yml` 内で設定する。
+`config/auth_keys.yaml` は Open5GS WebUI の加入者設定と一致させる。
+この方式はテスト・開発環境限定で使用し、認証鍵や加入者情報を Git やログに含めない。
 
-`start.sh` と `scripts/protect_local_configs.sh` はローカル環境専用で運用し、Git 管理対象外とする。
-実装・運用メモは `docs/` 配下に保存する。
+### 実行・実機検証
 
-> **NOTE**: `S1C_BIND_ADDR`, `N2_REMOTE_ADDR` 等のインターフェース設定は `docker-compose.yml` 内で自動設定されるため、`.env` での設定は不要。
-
-### 認証鍵の設定
-
-`config/auth_keys.yaml` に Open5GS WebUI で登録した加入者の Ki ・ OPc を記載する。テンプレートは `config/auth_keys.example.yaml` を参照。
-
-```bash
-cp config/auth_keys.example.yaml config/auth_keys.yaml
-# config/auth_keys.yaml を編集し、imsi / ki / opc を Open5GS WebUI の値に合わせる
-```
-
-> **WARNING**: `auth_keys.yaml` にはマスター鍵 (Ki ・ OPc) が含まれる。Git 管理外 (`.gitignore` に登録済み) であり、**テスト・開発環境限定** で使用すること。
-
-### ビルド・実行
-
-```bash
-# ビルド
-docker compose build s1n2
-
-# 起動 (公開リポジトリのみで再現可能な標準手順)
-docker compose up -d --build
-
-# ログ確認
-docker compose logs s1n2 -f
-
-# 停止
-docker compose down
-
-# リビルド (コード変更後)
-docker compose build s1n2 --no-cache && docker compose up -d
-```
-
-ローカル専用の `start.sh` を使う場合は、NIC 切替や排他制御を含む追加処理を実行できる。
-
-> **NOTE**: `start.sh` は環境変数でカスタマイズ可能。デフォルト値は検証環境 (Intel NUC + Baicells Nova430x) に合わせてある。
-> 別環境では以下のように上書きする：
-> ```bash
-> PHYS_NIC=eth0 ENB_IP=172.24.0.200 ./start.sh
-> ```
-> 詳細は [Wiki: eNB Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eNB-Setup-Guide#startsh-の環境変数) を参照。
-> スクリプト実装のローカル管理は `docs/` を参照。
-
-### 最小検証手順（公開リポジトリのみ）
-
-```bash
-# 1) 構成解決
-docker compose config --quiet
-
-# 2) 最小起動
-docker compose up -d --build
-
-# 3) 初期ヘルス確認
-docker compose ps
-docker logs s1n2 | grep -E 'listening S1C|N2 connected'
-
-# 4) eNB 接続時の確認
-docker logs s1n2 | grep -E 'S1SetupRequest detected|NGSetupResponse -> S1SetupResponse sent'
-```
-
-`NGSetupResponse -> S1SetupResponse sent` は eNB から S1SetupRequest が到来した場合に出力される。
-
-## README と Wiki の役割分担
-
-- README: 公開リポジトリのみで再現できる最小手順（clone / env / compose 起動 / 最小ログ確認）。
-- Wiki: eNB 機種別設定、eSIM 運用、物理ネットワーク調整、詳細設計、運用トラブルシュート。
-
-Wiki: [s1n2-gateway Wiki](https://github.com/Ytaihei/s1n2-gateway/wiki)
-
-## アーキテクチャ
-
-```
-eNB ──S1AP/GTP-U──► s1n2-converter ──NGAP/GTP-U──► AMF / UPF
-         (4G)            ↕ NAS変換            (5G)
-```
-
-C-Plane は S1AP↔NGAP を変換し、NAS PDU 内部の EPS↔5GS も同時に変換する。
-U-Plane は GTP-U ヘッダの TEID を書き換えて中継する。
-
-## 詳細ドキュメント
-
-プロジェクト構成・モジュール設計・命名規則などの詳細は [Wiki](https://github.com/Ytaihei/s1n2-gateway/wiki) を参照。
-
-## AIを利用した開発
-
-Codexなどの開発エージェントは、最初に `AGENTS.md` の安全境界を確認すること。
-通常の変更はブランチとPull Requestで行い、GitHub ActionsではDockerイメージの
-ビルドだけを実施する。実機環境の読み取り専用事前確認には次を使う。
+フルスタックの実行は、RG-VPN に接続し実基地局を利用できる認可されたリモートホストに限定する。
+実行前に [AGENTS.md](AGENTS.md) の運用条件を確認する。
+SSH 設定済みの認可された端末から、次の読み取り専用確認を実行できる。
 
 ```bash
 ./scripts/check-remote-status.sh
 ```
 
-この確認はSSH設定済みの認可された端末からのみ実行できる。ログ、加入者情報、
-認証鍵は取得せず、実機試験やデプロイも行わない。サービスの再起動、設定変更、
-エンドツーエンド試験には、その都度、実行内容と復旧方法を提示した上で明示的な
-承認が必要となる。
+このスクリプトは親・子の Git 状態、submodule 固定値、コンテナ、SCTP 接続数を確認する。
+ログや認証鍵は取得しない。SCTP 接続数やコンテナの状態だけでは UE の通信成功を証明できない。
+
+起動・再起動・設定変更・実機試験は、対象サービス、実行コマンド、復旧方法、
+期待する検証結果を確認してから行う。開発エージェントが実施する場合は明示的な承認が必要。
+実機用の `docker compose up` をローカル開発や CI の検証手順には含めない。
+ユーザーが明示的に依頼する独立した仮想試験は [lab/README.md](lab/README.md) を参照。
+
+承認済みの運用作業で使う基本コマンドは以下のとおり。
+認可されたホストの `s1n2-gateway/` で、作業内容に合うものを個別に実行する。
+`up` と `down` はこの Compose 構成全体に作用する。
+
+```bash
+# コンバーターのイメージをビルド
+docker compose build s1n2
+
+# スタックを起動（明示的な承認が必要）
+docker compose up -d
+
+# コンテナの状態を確認（UE の通信確認とは別）
+docker compose ps
+
+# スタックを停止（明示的な承認が必要）
+docker compose down
+```
+
+### 検証済みハードウェアと前提ソフトウェア
+
+| 項目 | 仕様 |
+|---|---|
+| ホストマシン | Intel NUC7i7BNH |
+| eNB | Baicells Nova430x（sXGP 対応 4G 基地局） |
+| UE | Google Pixel 8a |
+| OS | Ubuntu 22.04 LTS |
+| Docker Engine / Compose | 24+ / v2 |
+
+## ドキュメント案内
+
+- [lab/README.md](lab/README.md): 仮想LTE試験の起動・検証・後片付け。
+- [DEVELOPMENT.md](DEVELOPMENT.md): ビルド、検証、ソース変更の進め方。
+- [AGENTS.md](AGENTS.md): 開発エージェント向けの作業・運用条件。
+- [Wiki](https://github.com/Ytaihei/s1n2-gateway/wiki): 詳細設計、運用、トラブルシュート。
+- [eNB Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eNB-Setup-Guide): 基地局と物理ネットワークの設定。
+- [eSIM Setup Guide](https://github.com/Ytaihei/s1n2-gateway/wiki/eSIM-Setup-Guide): eSIM・加入者設定。
+- [Simlessly 公式マニュアル](https://docs.simlessly.com/rsp/user-manual/simlessly/simlessly.html): Simlessly の操作。
+
+`start.sh`、`scripts/protect_local_configs.sh`、`docs/` はローカル専用で Git 管理外。
+公開の開発手順は README と DEVELOPMENT.md に記載する。
 
 ## License
 

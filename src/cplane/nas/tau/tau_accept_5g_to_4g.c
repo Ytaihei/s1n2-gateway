@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file tau/tau_accept_5g_to_4g.c
  * @brief TAU Accept NAS message builder (4G EPS)
@@ -47,7 +48,7 @@ static int s1n2_append_tai_list_lv(uint8_t *nas,
 		tac16 = s1n2_get_tac_from_env();
 	}
 	if ((*offset) + 8 > capacity) {
-		printf("[ERROR] Not enough space to append TAI list IE (need 8, cap=%zu)\n",
+		LOG_ERROR("Not enough space to append TAI list IE (need 8, cap=%zu)\n",
 		       capacity - *offset);
 		return -1;
 	}
@@ -58,9 +59,7 @@ static int s1n2_append_tai_list_lv(uint8_t *nas,
 	(*offset) += 3;
 	nas[(*offset)++] = (uint8_t)((tac16 >> 8) & 0xFF);
 	nas[(*offset)++] = (uint8_t)(tac16 & 0xFF);
-	printf("[TRACE] Encoded TAI list IE (PLMN=%02X%02X%02X TAC=0x%04X)\n",
-	       plmn[0], plmn[1], plmn[2], tac16);
-	fflush(stdout);
+
 	return 0;
 }
 
@@ -72,7 +71,7 @@ static int s1n2_append_lai(uint8_t *nas,
 		return -1;
 	}
 	if ((*offset) + 6 > capacity) {
-		printf("[ERROR] Not enough space to append Location Area Identification IE\n");
+		LOG_ERROR("Not enough space to append Location Area Identification IE\n");
 		return -1;
 	}
 	uint8_t plmn[3] = {0};
@@ -94,8 +93,7 @@ static int s1n2_append_lai(uint8_t *nas,
 	*offset += 3;
 	nas[(*offset)++] = (uint8_t)((lac16 >> 8) & 0xFF);
 	nas[(*offset)++] = (uint8_t)(lac16 & 0xFF);
-	printf("[TRACE] Encoded LAI (PLMN=%02X%02X%02X LAC=0x%04X)\n",
-	       plmn[0], plmn[1], plmn[2], lac16);
+
 	return 0;
 }
 
@@ -113,8 +111,8 @@ static uint16_t s1n2_build_eps_bearer_status_mask(const ue_id_mapping_t *map) {
 		ebi = 5;
 	}
 	uint16_t mask = (uint16_t)(1u << ebi);
-	printf("[TRACE] EPS bearer status mask built from EBI=%u (mask=0x%04X)\n", ebi, mask);
-	fflush(stdout);
+	LOG_TRACE("EPS bearer status mask built from EBI=%u (mask=0x%04X)\n", ebi, mask);
+
 	return mask;
 }
 
@@ -129,16 +127,16 @@ static int s1n2_finalize_downlink_plain_nas(ue_id_mapping_t *ue_map,
 	}
 	size_t cap = *out_len;
 	if (plain_len > cap) {
-		printf("[ERROR] [%s] Output buffer too small for NAS (len=%zu cap=%zu)\n",
+		LOG_ERROR("[%s] Output buffer too small for NAS (len=%zu cap=%zu)\n",
 		       tag ? tag : "DL", plain_len, cap);
 		return -1;
 	}
 	if (!ue_map || !ue_map->has_nas_keys) {
 		memcpy(out, plain, plain_len);
 		*out_len = plain_len;
-		printf("[INFO] [%s] Sending plain NAS (no security context)\n",
+		LOG_INFO("[%s] Sending plain NAS (no security context)\n",
 		       tag ? tag : "DL");
-		fflush(stdout);
+
 		return 0;
 	}
 	uint8_t eia_sel = ue_map->selected_nas_security_alg & 0x07;
@@ -164,16 +162,16 @@ static int s1n2_finalize_downlink_plain_nas(ue_id_mapping_t *ue_map,
 		                     cipher_buf) == 0) {
 			payload = cipher_buf;
 			encrypted = true;
-			printf("[INFO] [%s] Applied NAS ciphering (EEA2, len=%zu)\n",
+			LOG_INFO("[%s] Applied NAS ciphering (EEA2, len=%zu)\n",
 			       tag ? tag : "DL", plain_len);
 		} else {
-			printf("[WARN] [%s] Failed to cipher NAS (EEA=%u), falling back to integrity-only\n",
+			LOG_WARN("[%s] Failed to cipher NAS (EEA=%u), falling back to integrity-only\n",
 			       tag ? tag : "DL", eea_sel);
 		}
 	}
 	uint8_t mac_input[1 + 512];
 	if (plain_len > 512) {
-		printf("[ERROR] [%s] NAS payload too large for MAC staging (%zu bytes)\n",
+		LOG_ERROR("[%s] NAS payload too large for MAC staging (%zu bytes)\n",
 		       tag ? tag : "DL", plain_len);
 		return -1;
 	}
@@ -183,7 +181,7 @@ static int s1n2_finalize_downlink_plain_nas(ue_id_mapping_t *ue_map,
 	if (s1n2_compute_smc_mac(integ_alg, ue_map->k_nas_int,
 	                         count_dl, mac_input, 1 + plain_len,
 	                         mac) != 0) {
-		printf("[WARN] [%s] Failed to compute NAS MAC, sending plain message\n",
+		LOG_WARN("[%s] Failed to compute NAS MAC, sending plain message\n",
 		       tag ? tag : "DL");
 		memcpy(out, plain, plain_len);
 		*out_len = plain_len;
@@ -191,7 +189,7 @@ static int s1n2_finalize_downlink_plain_nas(ue_id_mapping_t *ue_map,
 	}
 	size_t needed = 1 + 4 + 1 + plain_len;
 	if (needed > cap) {
-		printf("[ERROR] [%s] Output buffer too small after security wrapping (need %zu cap=%zu)\n",
+		LOG_ERROR("[%s] Output buffer too small after security wrapping (need %zu cap=%zu)\n",
 		       tag ? tag : "DL", needed, cap);
 		return -1;
 	}
@@ -206,11 +204,11 @@ static int s1n2_finalize_downlink_plain_nas(ue_id_mapping_t *ue_map,
 	*out_len = out_off;
 	uint32_t before = ue_map->nas_dl_count;
 	ue_map->nas_dl_count = (ue_map->nas_dl_count + 1) & 0xFFFFFFFFu;
-	printf("[INFO] [%s] Wrapped NAS with integrity%s (COUNT=0x%08X -> 0x%08X, seq=%u)\n",
+	LOG_INFO("[%s] Wrapped NAS with integrity%s (COUNT=0x%08X -> 0x%08X, seq=%u)\n",
 	       tag ? tag : "DL",
 	       encrypted ? "+cipher" : "",
 	       before, ue_map->nas_dl_count, seq);
-	fflush(stdout);
+
 	return 0;
 }
 
@@ -238,7 +236,7 @@ int s1n2_build_tau_accept_nas(s1n2_context_t *ctx,
 	// Old (wrong): eps_update_type_octet >> 4 - this extracted spare bits
 	// New (correct): eps_update_type_octet & 0x07 - extracts actual update type from bits 1-3
 	uint8_t eps_update_type = (uint8_t)(eps_update_type_octet & 0x07);
-	printf("[INFO] [TAU-ACCEPT] EPS Update Type extraction: input_octet=0x%02X, extracted_type=%u\n",
+	LOG_INFO("[TAU-ACCEPT] EPS Update Type extraction: input_octet=0x%02X, extracted_type=%u\n",
 	       eps_update_type_octet, eps_update_type);
 	// TS 24.301 9.9.3.13: EPS update result values:
 	//   0 = TA updating
@@ -251,25 +249,25 @@ int s1n2_build_tau_accept_nas(s1n2_context_t *ctx,
 	uint8_t eps_update_result;
 	if (eps_update_type == 1 || eps_update_type == 2) {
 		eps_update_result = 0x01;  // Combined TA/LA updating
-		printf("[INFO] [TAU-ACCEPT] Combined TA/LA requested (type=%u) -> result=1\n", eps_update_type);
+		LOG_INFO("[TAU-ACCEPT] Combined TA/LA requested (type=%u) -> result=1\n", eps_update_type);
 	} else {
 		eps_update_result = 0x00;  // TA updating only
-		printf("[INFO] [TAU-ACCEPT] TA updating only (type=%u) -> result=0\n", eps_update_type);
+		LOG_INFO("[TAU-ACCEPT] TA updating only (type=%u) -> result=0\n", eps_update_type);
 	}
-	printf("[INFO] [TAU-ACCEPT] EPS Update Result: %u (%s)\n", eps_update_result,
+	LOG_INFO("[TAU-ACCEPT] EPS Update Result: %u (%s)\n", eps_update_result,
 	       eps_update_result == 1 ? "Combined TA/LA updating" : "TA updating");
 	plain[off++] = (uint8_t)(eps_update_result & 0x07);  // Value in bits 1-4, spare 0 in bits 5-8
 	plain[off++] = 0x29; // Default T3412 timer (9 minutes)
 	if (s1n2_append_tai_list_lv(plain, &off, cap, ue_map) != 0) {
-		printf("[WARN] [TAU-ACCEPT] Failed to append TAI list - continuing with defaults\n");
+		LOG_WARN("[TAU-ACCEPT] Failed to append TAI list - continuing with defaults\n");
 	}
 	bool combined_la_required = (eps_update_type == 0x01 || eps_update_type == 0x02);
 	if (combined_la_required) {
 		if (s1n2_append_lai(plain, &off, cap, ue_map) != 0) {
-			printf("[WARN] [TAU-ACCEPT] Failed to append LAI despite combined TA/LA request\n");
+			LOG_WARN("[TAU-ACCEPT] Failed to append LAI despite combined TA/LA request\n");
 		}
 	} else {
-		printf("[TRACE] [TAU-ACCEPT] Skipping LAI (update type=%u)\n", eps_update_type);
+		LOG_TRACE("[TAU-ACCEPT] Skipping LAI (update type=%u)\n", eps_update_type);
 	}
 	uint16_t bearer_mask = s1n2_build_eps_bearer_status_mask(ue_map);
 	if (bearer_mask) {
@@ -278,16 +276,16 @@ int s1n2_build_tau_accept_nas(s1n2_context_t *ctx,
 			plain[off++] = 0x02;
 			plain[off++] = (uint8_t)((bearer_mask >> 8) & 0xFF);
 			plain[off++] = (uint8_t)(bearer_mask & 0xFF);
-			printf("[TRACE] [TAU-ACCEPT] EPS bearer context status IE appended (mask=0x%04X)\n",
+			LOG_TRACE("[TAU-ACCEPT] EPS bearer context status IE appended (mask=0x%04X)\n",
 			       bearer_mask);
 		} else {
-			printf("[WARN] [TAU-ACCEPT] Not enough space for EPS bearer context status IE\n");
+			LOG_WARN("[TAU-ACCEPT] Not enough space for EPS bearer context status IE\n");
 		}
 	} else {
-		printf("[TRACE] [TAU-ACCEPT] Skipped EPS bearer context status IE (no active bearer)\n");
+		LOG_TRACE("[TAU-ACCEPT] Skipped EPS bearer context status IE (no active bearer)\n");
 	}
 	size_t plain_len = off;
-	printf("[TRACE] [TAU-ACCEPT] Plain NAS payload (len=%zu)\n", plain_len);
+	LOG_TRACE("[TAU-ACCEPT] Plain NAS payload (len=%zu)\n", plain_len);
 	s1n2_dump_hex("[TAU-ACCEPT-PLAIN]", plain, plain_len);
 	size_t final_cap = *out_len;
 	*out_len = final_cap;

@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file ngap_setup_request.c
  * @brief NGAP NGSetupRequest builder
@@ -37,12 +38,7 @@
 #include <aper_encoder.h>
 
 static void hexdump(const char *tag, const uint8_t *buf, size_t len) {
-    printf("[HEX] %s (%zu): ", tag, len);
-    for (size_t i = 0; i < len; ++i) {
-        printf("%02X", buf[i]);
-        if (i + 1 < len) putchar(' ');
-    }
-    putchar('\n');
+
 }
 
 // PLMN: MCC/MNC -> 3 octet BCD (TS 38.413 Annex) helper
@@ -203,22 +199,22 @@ static int build_ngsetup_request_internal(uint8_t *buf, size_t *len,
     errlen = sizeof(errbuf);
     ccr = asn_check_constraints(&asn_DEF_NGAP_NGAP_PDU, &pdu, errbuf, &errlen);
     if (ccr) {
-        printf("[ERROR] NGAP_PDU constraints: %s\n", errbuf[0]?errbuf:"unknown");
-        fflush(stdout);
+        LOG_ERROR("NGAP_PDU constraints: %s\n", errbuf[0]?errbuf:"unknown");
+
     }
 
     errlen = sizeof(errbuf);
     ccr = asn_check_constraints(&asn_DEF_NGAP_NGSetupRequest, NGSetupRequest, errbuf, &errlen);
     if (ccr) {
-        printf("[ERROR] NGSetupRequest constraints: %s\n", errbuf[0]?errbuf:"unknown");
-        fflush(stdout);
+        LOG_ERROR("NGSetupRequest constraints: %s\n", errbuf[0]?errbuf:"unknown");
+
     }
 
     // Direct APER encoding
     asn_enc_rval_t er = aper_encode_to_buffer(&asn_DEF_NGAP_NGAP_PDU, NULL, &pdu, buf, *len);
     if (er.encoded == -1) {
-        printf("[ERROR] aper_encode_to_buffer failed: %s\n", strerror(errno));
-        fflush(stdout);
+        LOG_ERROR("aper_encode_to_buffer failed: %s\n", strerror(errno));
+
         return -1;
     }
     size_t out = er.encoded;

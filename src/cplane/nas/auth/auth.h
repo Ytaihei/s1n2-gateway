@@ -13,8 +13,8 @@
  * @see 3GPP TS 24.501 (NAS for 5GS)
  * @see 3GPP TS 33.401 / TS 33.501 (Security)
  */
-#ifndef S1N2_AUTH_H
-#define S1N2_AUTH_H
+#ifndef S1N2_NAS_AUTH_MODULE_H
+#define S1N2_NAS_AUTH_MODULE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -89,4 +89,4 @@ int auth_failure_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 }
 #endif
 
-#endif /* S1N2_AUTH_H */
+#endif /* S1N2_NAS_AUTH_MODULE_H */

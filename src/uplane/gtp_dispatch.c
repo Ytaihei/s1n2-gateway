@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file gtp_dispatch.c
  * @brief GTP-U message dispatcher — direction detection + handler routing
@@ -53,22 +54,26 @@ static ue_id_mapping_t *find_downlink_mapping(s1n2_context_t *ctx, uint32_t teid
 
 static void log_tau_status(const ue_id_mapping_t *ue_map) {
     if (ue_map->in_tau_procedure) {
-        printf("[INFO] [TAU-AWARE] UE in TAU procedure, continuing U-Plane forwarding\n");
+        LOG_INFO("[TAU-AWARE] UE in TAU procedure, continuing U-Plane forwarding\n");
     }
     if (ue_map->preserve_teid_mapping) {
-        printf("[DEBUG] [TAU-AWARE] TEID mapping protected (preserve_teid=true)\n");
+        LOG_DEBUG("[TAU-AWARE] TEID mapping protected (preserve_teid=true)\n");
     }
-    fflush(stdout);
+
 }
 
 /* ------------------------------------------------------------------
  * Public API:  s1n2_handle_gtpu_message()
  * ------------------------------------------------------------------ */
 
-int s1n2_handle_gtpu_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
+int s1n2_handle_gtpu_message(s1n2_context_t *ctx, uint8_t *data, size_t len,
+                            s1n2_gtpu_ingress_t ingress) {
+    if (!ctx || !data || (ingress != S1N2_GTPU_FROM_S1U && ingress != S1N2_GTPU_FROM_N3)) {
+        return -1;
+    }
     if (len < 8) {
-        printf("[DEBUG] GTP-U message too short (%zd bytes)\n", len);
-        fflush(stdout);
+        LOG_DEBUG("GTP-U message too short (%zd bytes)\n", len);
+
         return -1;
     }
 
@@ -76,48 +81,39 @@ int s1n2_handle_gtpu_message(s1n2_context_t *ctx, uint8_t *data, size_t len) {
     uint8_t message_type;
 
     if (s1n2_parse_gtpu_header(data, len, &teid, &message_type) != 0) {
-        printf("[DEBUG] Invalid GTP-U header\n");
-        fflush(stdout);
+        LOG_DEBUG("Invalid GTP-U header\n");
+
         return -1;
     }
 
-    printf("[DEBUG] Enhanced GTP-U message: type=%d, TEID=0x%08x, len=%zd\n",
+    LOG_DEBUG("Enhanced GTP-U message: type=%d, TEID=0x%08x, len=%zd\n",
            message_type, teid, len);
-    fflush(stdout);
 
     /* ---- Echo Request / Response ---- */
     if (message_type == 1 || message_type == 2) {
-        return s1n2_handle_gtpu_echo(ctx, teid, message_type);
+        return s1n2_handle_gtpu_echo(ingress == S1N2_GTPU_FROM_S1U ? ctx->s1u_fd : ctx->n3_fd,
+                                     teid, message_type);
     }
 
     /* ---- G-PDU (type 0xFF) ---- */
     if (message_type == 0xFF) {
-        printf("[DEBUG] Enhanced GTP-U G-PDU processing, TEID=0x%08x\n", teid);
-        fflush(stdout);
+        LOG_DEBUG("Enhanced GTP-U G-PDU processing, TEID=0x%08x\n", teid);
 
-        /* 1. Check uplink */
-        ue_id_mapping_t *ue_up = find_uplink_mapping(ctx, teid);
-        if (ue_up) {
-            printf("[DEBUG] Detected UPLINK packet: TEID=0x%08x matches s1n2 uplink TEID\n", teid);
-            fflush(stdout);
-            log_tau_status(ue_up);
-            return s1n2_forward_uplink(ctx, data, len, teid, ue_up);
+        ue_id_mapping_t *ue_map = ingress == S1N2_GTPU_FROM_S1U
+            ? find_uplink_mapping(ctx, teid) : find_downlink_mapping(ctx, teid);
+        if (!ue_map) {
+            LOG_WARN("Unknown GTP-U TEID=0x%08x on %s; dropping\n",
+                   teid, ingress == S1N2_GTPU_FROM_S1U ? "S1-U" : "N3");
+            return -1;
         }
-
-        /* 2. Check downlink */
-        ue_id_mapping_t *ue_down = find_downlink_mapping(ctx, teid);
-        if (ue_down) {
-            printf("[DEBUG] Detected DOWNLINK packet: TEID=0x%08x matches eNB downlink TEID\n", teid);
-            fflush(stdout);
-            log_tau_status(ue_down);
-            return s1n2_forward_downlink(ctx, data, len, teid, ue_down);
+        log_tau_status(ue_map);
+        if (ingress == S1N2_GTPU_FROM_S1U) {
+            return s1n2_forward_uplink(ctx, data, len, teid, ue_map);
         }
-
-        /* 3. Unknown TEID — legacy fallback */
-        return s1n2_forward_legacy(ctx, data, len, teid);
+        return s1n2_forward_downlink(ctx, data, len, teid, ue_map);
     }
 
-    printf("[DEBUG] Unknown GTP-U message type: %d\n", message_type);
-    fflush(stdout);
+    LOG_DEBUG("Unknown GTP-U message type: %d\n", message_type);
+
     return 0;
 }

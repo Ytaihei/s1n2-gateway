@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file handle_s1_setup.c
  * @brief S1SetupRequest handler (procedure code 17)
@@ -10,8 +11,7 @@
 #include "s1ap_dispatch_handlers.h"
 
 int s1ap_dispatch_s1_setup(s1n2_context_t *ctx, uint8_t *data, size_t len) {
-    printf("[DEBUG] S1SetupRequest detected\n");
-    fflush(stdout);
+    LOG_DEBUG("S1SetupRequest detected\n");
 
     /* Proactive: eNB likely restarted. Reset ICS state for all UE mappings. */
     if (ctx) {
@@ -26,18 +26,18 @@ int s1ap_dispatch_s1_setup(s1n2_context_t *ctx, uint8_t *data, size_t len) {
             }
         }
         if (cleared)
-            printf("[INFO] [ICS] Reset ICS state for %zu UE mapping(s) due to new S1SetupRequest (eNB restart)\n", cleared);
+            LOG_INFO("[ICS] Reset ICS state for %zu UE mapping(s) due to new S1SetupRequest (eNB restart)\n", cleared);
     }
 
     /* Convert S1AP S1SetupRequest to NGAP NGSetupRequest */
     uint8_t ngap_data[1024];
     size_t ngap_len = sizeof(ngap_data);
 
-    printf("[DEBUG] Calling s1n2_convert_s1setup_to_ngsetup\n");
-    fflush(stdout);
+    LOG_DEBUG("Calling s1n2_convert_s1setup_to_ngsetup\n");
+
     int result = s1n2_convert_s1setup_to_ngsetup(data, len, ngap_data, &ngap_len);
-    printf("[DEBUG] s1n2_convert_s1setup_to_ngsetup result: %d\n", result);
-    fflush(stdout);
+    LOG_DEBUG("s1n2_convert_s1setup_to_ngsetup result: %d\n", result);
+
     if (result == 0) {
         /* Check N2 connection before sending */
         if (!ctx->n2_connected) {
@@ -47,11 +47,11 @@ int s1ap_dispatch_s1_setup(s1n2_context_t *ctx, uint8_t *data, size_t len) {
                 ctx->pending_s1setup.s1ap_len = len;
                 ctx->pending_s1setup.received_time = time(NULL);
                 ctx->has_pending_s1setup = true;
-                printf("[INFO] N2 connection not established, S1SetupRequest queued for later processing\n");
+                LOG_INFO("N2 connection not established, S1SetupRequest queued for later processing\n");
             } else {
-                printf("[ERROR] S1SetupRequest too large to queue (%zu bytes)\n", len);
+                LOG_ERROR("S1SetupRequest too large to queue (%zu bytes)\n", len);
             }
-            fflush(stdout);
+
             return 0;
         }
 
@@ -59,11 +59,11 @@ int s1ap_dispatch_s1_setup(s1n2_context_t *ctx, uint8_t *data, size_t len) {
         ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_data, (size_t)ngap_len,
                                     NULL, 0, htonl(60), 0, 0, 0, 0);
         if (sent == (ssize_t)ngap_len) {
-            printf("[INFO] S1SetupRequest -> NGSetupRequest sent (%zd bytes, PPID=60)\n", sent);
-            fflush(stdout);
+            LOG_INFO("S1SetupRequest -> NGSetupRequest sent (%zd bytes, PPID=60)\n", sent);
+
         } else {
-            printf("[ERROR] Failed to send NGSetupRequest via SCTP (ret=%zd, PPID=60, errno=%d)\n", sent, errno);
-            fflush(stdout);
+            LOG_ERROR("Failed to send NGSetupRequest via SCTP (ret=%zd, PPID=60, errno=%d)\n", sent, errno);
+
         }
     }
     return 0;

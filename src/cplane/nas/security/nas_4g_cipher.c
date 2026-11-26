@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 #include "internal/nas_security.h"
 #include <stdio.h>
 #include <string.h>
@@ -41,7 +42,7 @@ static int compute_eia2_mac(
     int ret = -1;
 
     if (!key || !message || !mac_out || msg_len > 2040) {
-        fprintf(stderr, "[ERROR] Invalid parameters for EIA2 MAC computation\n");
+        LOG_ERROR("Invalid parameters for EIA2 MAC computation\n");
         return -1;
     }
 
@@ -67,34 +68,27 @@ static int compute_eia2_mac(
     input_len = 8 + msg_len;
 
     // Debug: Print MAC calculation input
-    printf("[DEBUG] EIA2 MAC Input (count=0x%08X, bearer=%u, dir=%u, msg_len=%zu):\n",
+    LOG_DEBUG("EIA2 MAC Input (count=0x%08X, bearer=%u, dir=%u, msg_len=%zu):\n",
            count, bearer, direction, msg_len);
-    printf("[DEBUG]   Header: %02X %02X %02X %02X %02X %02X %02X %02X\n",
-           input[0], input[1], input[2], input[3], input[4], input[5], input[6], input[7]);
-    printf("[DEBUG]   Message (full %zu bytes): ", msg_len);
-    for (size_t i = 0; i < msg_len; i++) {
-        printf("%02X ", message[i]);
-        if ((i + 1) % 32 == 0 && i + 1 < msg_len) printf("\n[DEBUG]   ");
-    }
-    printf("\n");    // Compute CMAC using OpenSSL
+
     cmac_ctx = CMAC_CTX_new();
     if (!cmac_ctx) {
-        fprintf(stderr, "[ERROR] Failed to create CMAC context\n");
+        LOG_ERROR("Failed to create CMAC context\n");
         goto cleanup;
     }
 
     if (CMAC_Init(cmac_ctx, key, 16, EVP_aes_128_cbc(), NULL) != 1) {
-        fprintf(stderr, "[ERROR] Failed to initialize CMAC\n");
+        LOG_ERROR("Failed to initialize CMAC\n");
         goto cleanup;
     }
 
     if (CMAC_Update(cmac_ctx, input, input_len) != 1) {
-        fprintf(stderr, "[ERROR] Failed to update CMAC\n");
+        LOG_ERROR("Failed to update CMAC\n");
         goto cleanup;
     }
 
     if (CMAC_Final(cmac_ctx, cmac, &cmac_len) != 1) {
-        fprintf(stderr, "[ERROR] Failed to finalize CMAC\n");
+        LOG_ERROR("Failed to finalize CMAC\n");
         goto cleanup;
     }
 
@@ -138,11 +132,11 @@ int s1n2_nas_compute_mac(
         case S1N2_NAS_EIA1:
         case S1N2_NAS_EIA3:
             // Not implemented yet
-            fprintf(stderr, "[ERROR] EIA%d not implemented\n", algorithm);
+            LOG_ERROR("EIA%d not implemented\n", algorithm);
             return -1;
 
         default:
-            fprintf(stderr, "[ERROR] Unknown integrity algorithm: %d\n", algorithm);
+            LOG_ERROR("Unknown integrity algorithm: %d\n", algorithm);
             return -1;
     }
 }
@@ -184,7 +178,7 @@ int s1n2_nas_encrypt(
             // COUNT[31:0] || BEARER[4:0] || DIRECTION[0] || 26*0 || CTR[63:0]
             AES_KEY aes_key;
             if (AES_set_encrypt_key(key, 128, &aes_key) != 0) {
-                fprintf(stderr, "[ERROR] Failed to set AES key for EEA2\n");
+                LOG_ERROR("Failed to set AES key for EEA2\n");
                 return -1;
             }
 
@@ -228,7 +222,7 @@ int s1n2_nas_encrypt(
         case S1N2_NAS_EEA1:
         case S1N2_NAS_EEA3:
         default:
-            fprintf(stderr, "[ERROR] EEA%d not implemented\n", algorithm);
+            LOG_ERROR("EEA%d not implemented\n", algorithm);
             return -1;
     }
 }

@@ -1,0 +1,8 @@
+PASS: GTP-U direction, colliding TEIDs, rejection and echo routing
+PASS: chained GTP-U extensions, optional sequence and malformed lengths
+PASS: log levels and single-line event format
+PASS: TRACE logs omit input keys, RAND, derived NAS keys and raw payloads
+PASS: NAS key selection and SMC fallback (5 algorithm combinations)
+PASS: 5G NAS NEA0/NEA2, 2 COUNT rollovers, bad MAC/replay and failure-state preservation
+PASS: S1AP uplink NAS EEA0/EEA2 with EIA2, including bad MAC rejection
+PASS: core-assigned IP, EPS address encoding, session mismatch and truncated input

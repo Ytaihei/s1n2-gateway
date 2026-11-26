@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file ics_builder.c
  * @brief S1AP InitialContextSetupRequest ASN.1 encoder
@@ -202,18 +203,16 @@ int build_s1ap_initial_context_setup_request(uint8_t *buffer, size_t *buffer_len
 
         if (kenb) {
             memcpy(sk->buf, kenb, 32);
-            printf("[DEBUG] ICS Request: Using derived KeNB (first 8): ");
-            for (int i = 0; i < 8; i++) printf("%02X", kenb[i]);
-            printf("..\n");
+
         } else {
-            printf("[WARN] ICS Request: KeNB not provided, using dummy pattern\n");
+
             for (int i = 0; i < 32; i++) sk->buf[i] = (uint8_t)(0x11 + (i & 0x0F));
         }
     }
     ASN_SEQUENCE_ADD(&req->protocolIEs.list, ie);
 
     if (asn_check_constraints(&asn_DEF_S1AP_S1AP_PDU, pdu, NULL, NULL) != 0) {
-        fprintf(stderr, "[ERROR] ASN.1 constraint check failed for S1AP ICS PDU\n");
+        LOG_ERROR("ASN.1 constraint check failed for S1AP ICS PDU\n");
         goto fail;
     }
 

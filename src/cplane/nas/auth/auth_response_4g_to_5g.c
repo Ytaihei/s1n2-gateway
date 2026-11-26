@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file auth/auth_response_4g_to_5g.c
  * @brief 4G Authentication Response (0x53) → 5G Authentication Response (0x57)
@@ -33,10 +34,10 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	}
 
 	uint8_t msg_type = 0x53;
-	printf("[INFO] Converting 4G Authentication Response (0x%02X) -> 5G Authentication Response (0x57)\n", msg_type);
+	LOG_INFO("Converting 4G Authentication Response (0x%02X) -> 5G Authentication Response (0x57)\n", msg_type);
 
 	if (nas_4g_len < payload_offset + 1) {
-		printf("[ERROR] 4G Authentication Response too short (len=%zu)\n", nas_4g_len);
+		LOG_ERROR("4G Authentication Response too short (len=%zu)\n", nas_4g_len);
 		return -1;
 	}
 
@@ -49,35 +50,31 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		if (nas_4g[res_offset] == 0x2D) {
 			res_offset++;
 			if (res_offset >= nas_4g_len) {
-				printf("[ERROR] 4G Authentication Response truncated at RES IEI\n");
+				LOG_ERROR("4G Authentication Response truncated at RES IEI\n");
 				return -1;
 			}
 		}
 		// Read RES length
 		res_len = nas_4g[res_offset++];
 		if (res_offset + res_len > nas_4g_len) {
-			printf("[ERROR] 4G Authentication Response RES length mismatch (len=%u, available=%zu)\n",
+			LOG_ERROR("4G Authentication Response RES length mismatch (len=%u, available=%zu)\n",
 				   res_len, nas_4g_len - res_offset);
 			return -1;
 		}
 		res_value = &nas_4g[res_offset];
 	} else {
-		printf("[ERROR] 4G Authentication Response missing RES\n");
+		LOG_ERROR("4G Authentication Response missing RES\n");
 		return -1;
 	}
 
-	printf("[DEBUG] 4G RES: len=%u, value=", res_len);
-	for (uint8_t i = 0; i < res_len && i < 16; i++) {
-		printf("%02X ", res_value[i]);
-	}
-	printf("\n");
+	LOG_DEBUG("4G authentication response length=%u", res_len);
 
 	size_t nas_5g_offset = 0;
 	const uint8_t res_star_len = 16;
 	size_t required_len = 3 + 1 + 1 + res_star_len;
 
 	if (*nas_5g_len < required_len) {
-		printf("[ERROR] Output buffer too small for 5G Authentication Response (need %zu, have %zu)\n",
+		LOG_ERROR("Output buffer too small for 5G Authentication Response (need %zu, have %zu)\n",
 			   required_len, *nas_5g_len);
 		return -1;
 	}
@@ -104,43 +101,24 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		// Strict: Use only the provided UE mapping when it already has cached RAND/AUTN/IMSI
 		if (ue_map && ue_map->rand_cached && ue_map->autn_cached && ue_map->imsi[0] != '\0') {
 			ue_mapping = ue_map;
-			printf("[DEBUG] Using provided UE mapping (ENB=%ld,RAN=%ld,AMF=%ld) for RES* computation\n",
+			LOG_DEBUG("Using provided UE mapping (ENB=%ld,RAN=%ld,AMF=%ld) for RES* computation\n",
 				   ue_map->enb_ue_s1ap_id, ue_map->ran_ue_ngap_id, ue_map->amf_ue_ngap_id);
 		}
 
 		if (ue_mapping && ue_mapping->rand_cached && ue_mapping->autn_cached && ue_mapping->imsi[0] != '\0') {
-			printf("[INFO] Found cached RAND and IMSI for UE, attempting RES* computation\n");
-			printf("[DEBUG] IMSI: %s\n", ue_mapping->imsi);
-			printf("[DEBUG] RAND: ");
-			for (int i = 0; i < 16; i++) {
-				printf("%02X", ue_mapping->rand[i]);
-			}
-			printf("\n");
-			printf("[DEBUG] SQN^AK: ");
-			for (int i = 0; i < 6; i++) {
-				printf("%02X", ue_mapping->sqn_xor_ak[i]);
-			}
-			printf("\n");
-			printf("[DEBUG] 4G RES (input): ");
-			for (uint8_t i = 0; i < res_len; i++) {
-				printf("%02X", res_value[i]);
-			}
-			printf(" (len=%u)\n", res_len);
+
+			LOG_INFO(" (len=%u)\n", res_len);
 
 			if (s1n2_auth_compute_res_star_with_imsi(auth_ctx_ptr, ue_mapping->imsi,
 													  ue_mapping->rand,
 													  ue_mapping->sqn_xor_ak,
 													  res_value, res_len, res_star) == 0) {
-				printf("[SUCCESS] RES* computed successfully using cryptographic functions\n");
-				printf("[DEBUG] 5G RES* (computed): ");
-				for (int i = 0; i < 16; i++) {
-					printf("%02X", res_star[i]);
-				}
-				printf("\n");
+				LOG_INFO("RES* computed successfully using cryptographic functions\n");
+
 				res_star_computed = true;
 
 				// ===== KEY DERIVATION: 4G AND 5G NAS keys =====
-				printf("[INFO] Deriving 4G and 5G NAS keys for Security Mode Command/Complete\n");
+				LOG_INFO("Deriving 4G and 5G NAS keys for Security Mode Command/Complete\n");
 
 				// Get subscriber keys (Ki, OPc)
 				s1n2_subscriber_keys_t *keys = s1n2_auth_get_keys(auth_ctx_ptr, ue_mapping->imsi);
@@ -158,11 +136,6 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 					uint8_t int_alg = 2; // EIA2 (AES-CMAC)
 					uint8_t enc_alg = 2; // EEA2 (AES-CTR)
 
-					printf("[INFO] [SQN-FIX] Using SQN^AK from UE context for KASME derivation\n");
-					printf("[INFO] [SQN-FIX]   SQN^AK: ");
-					for (int i = 0; i < 6; i++) printf("%02X", ue_mapping->sqn_xor_ak[i]);
-					printf("\n");
-
 					if (s1n2_derive_4g_nas_keys(keys->ki, keys->opc,
 					                            ue_mapping->rand,
 					                            ue_mapping->sqn_xor_ak,
@@ -173,21 +146,18 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 						ue_mapping->has_nas_keys = true;
 						ue_mapping->nas_dl_count = 0;
 						ue_mapping->nas_ul_count = 0;
-						printf("[SUCCESS] 4G NAS keys derived for UE\n");
+						LOG_INFO("4G NAS keys derived for UE\n");
 
 						// Derive KASME for ICS (KeNB will be derived later after Security Mode Complete)
 						if (s1n2_kdf_kasme(ck, ik, ue_mapping->sqn_xor_ak, plmn_id, ue_mapping->kasme) == 0) {
 							ue_mapping->has_kasme = true;
-							printf("[SUCCESS] KASME cached for UE (head 8B): ");
-							for (int i = 0; i < 8; i++) printf("%02X", ue_mapping->kasme[i]);
-							printf("..\n");
-							printf("[SUCCESS] [SQN-FIX] KASME derived with correct SQN^AK (not 0)\n");
+
 						} else {
 							ue_mapping->has_kasme = false;
-							printf("[WARN] Failed to derive KASME\n");
+
 						}
 					} else {
-						printf("[WARN] Failed to derive 4G NAS keys\n");
+						LOG_WARN("Failed to derive 4G NAS keys\n");
 						ue_mapping->has_nas_keys = false;
 					}
 
@@ -197,11 +167,9 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 
 					// Step 1: Derive Kausf
 					if (s1n2_kdf_kausf(ck, ik, ue_mapping->sqn_xor_ak, serving_network, ue_mapping->kausf) == 0) {
-						printf("[INFO] Kausf derived for 5G key hierarchy\n");
 
 						// Step 2: Derive Kseaf from Kausf
 						if (s1n2_kdf_kseaf(ue_mapping->kausf, serving_network, ue_mapping->kseaf) == 0) {
-							printf("[INFO] Kseaf derived for 5G key hierarchy\n");
 
 							// Step 3: Derive Kamf from Kseaf
 							// Build SUPI from IMSI
@@ -213,14 +181,12 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 							uint8_t abba_len = 2;
 							if (ue_mapping->abba_len == 2) {
 								memcpy(abba, ue_mapping->abba, 2);
-								printf("[INFO] Using cached ABBA for Kamf: %02X %02X (len=%u)\n",
-									   abba[0], abba[1], (unsigned)abba_len);
+
 							} else {
-								printf("[WARN] No cached ABBA found; using default 00 00 for Kamf\n");
+
 							}
 
 							if (s1n2_kdf_kamf(ue_mapping->kseaf, supi, abba, abba_len, ue_mapping->kamf) == 0) {
-								printf("[INFO] Kamf derived for 5G key hierarchy\n");
 
 								// Step 4: Derive 5G NAS keys from Kamf
 								// NOTE: To interoperate with our AMF (Open5GS), we use type=0x02 for integrity and 0x01 for encryption.
@@ -230,24 +196,22 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 									s1n2_kdf_nas_5g(ue_mapping->kamf, 0x01 /* encryption */, enc_alg, ue_mapping->k_nas_enc_5g) == 0) {
 									ue_mapping->has_5g_nas_keys = true;
 									ue_mapping->nas_ul_count_5g = 0;
-									printf("[SUCCESS] 5G NAS keys derived for Security Mode Complete MAC\n");
-									printf("[INFO] K_NASint_5G: ");
-									for (int i = 0; i < 16; i++) printf("%02X", ue_mapping->k_nas_int_5g[i]);
-									printf("\n");
+									LOG_INFO("5G NAS keys derived for Security Mode Complete MAC\n");
+
 								} else {
-									printf("[WARN] Failed to derive 5G NAS keys\n");
+									LOG_WARN("Failed to derive 5G NAS keys\n");
 								}
 							} else {
-								printf("[WARN] Failed to derive Kamf\n");
+
 							}
 						} else {
-							printf("[WARN] Failed to derive Kseaf\n");
+
 						}
 					} else {
-						printf("[WARN] Failed to derive Kausf for 5G keys\n");
+
 					}
 				} else {
-					printf("[WARN] Subscriber keys not found for IMSI %s\n", ue_mapping->imsi);
+
 					ue_mapping->has_nas_keys = false;
 				}
 				// ===== END KEY DERIVATION =====
@@ -257,26 +221,23 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 				memset(ue_mapping->autn, 0, sizeof(ue_mapping->autn));
 				memset(ue_mapping->sqn_xor_ak, 0, sizeof(ue_mapping->sqn_xor_ak));
 			} else {
-				printf("[ERROR] Failed to compute RES* - falling back to zero-padding\n");
+				LOG_ERROR("Failed to compute RES* - falling back to zero-padding\n");
 			}
 		} else {
 			// Do NOT search other UE mappings; avoid cross-UE RAND mix-ups.
 			if (!ue_map) {
-				printf("[ERROR] No UE mapping provided to RES* computation path; aborting conversion.\n");
+				LOG_ERROR("No UE mapping provided to RES* computation path; aborting conversion.\n");
 			} else {
-				printf("[ERROR] UE mapping missing required cache: rand_cached=%d, autn_cached=%d, imsi_present=%d\n",
-					   ue_map ? (int)ue_map->rand_cached : 0,
-					   ue_map ? (int)ue_map->autn_cached : 0,
-					   (ue_map && ue_map->imsi[0] != '\0'));
+
 			}
-			printf("[HINT] Ensure RAND/AUTN/ABBA are cached from 5G Authentication Request before sending Authentication Response.\n");
+			LOG_INFO("[HINT] Ensure RAND/AUTN/ABBA are cached from 5G Authentication Request before sending Authentication Response.\n");
 		}
 	} else {
-		printf("[ERROR] Authentication context unavailable; aborting conversion.\n");
+		LOG_ERROR("Authentication context unavailable; aborting conversion.\n");
 	}
 
 	if (!res_star_computed) {
-		printf("[ERROR] Could not compute 5G RES*; conversion of Authentication Response aborted.\n");
+		LOG_ERROR("Could not compute 5G RES*; conversion of Authentication Response aborted.\n");
 		return -1;
 	}
 
@@ -285,15 +246,8 @@ int auth_response_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 
 	*nas_5g_len = nas_5g_offset;
 
-	printf("[INFO] 5G Authentication Response created (len=%zu, RES*_len=16, original_RES_len=%u)\n",
+	LOG_INFO("5G Authentication Response created (len=%zu, RES*_len=16, original_RES_len=%u)\n",
 		   *nas_5g_len, res_len);
-	printf("[DEBUG] 5G NAS-PDU bytes: ");
-	for (size_t i = 0; i < *nas_5g_len && i < 32; i++) {
-		printf("%02X ", nas_5g[i]);
-	}
-	if (*nas_5g_len > 32) printf("...");
-	printf("\n");
-	fflush(stdout);
 
 	return 0;
 }

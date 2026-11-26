@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file kdf_5gs.c
  * @brief 5G Security Key Derivation Functions (3GPP TS 33.501)
@@ -15,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdbool.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -38,7 +40,7 @@ int s1n2_kdf_kausf(const uint8_t *ck, const uint8_t *ik,
                    const char *serving_network_name,
                    uint8_t *kausf) {
     if (!ck || !ik || !sqn_xor_ak || !serving_network_name || !kausf) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_kausf\n", LOG_TAG);
+
         return -1;
     }
 
@@ -64,37 +66,16 @@ int s1n2_kdf_kausf(const uint8_t *ck, const uint8_t *ik,
     input[offset++] = (sqn_length >> 8) & 0xFF;
     input[offset++] = sqn_length & 0xFF;
 
-    size_t sn_len_dbg = strlen(serving_network_name);
-    printf("%s [DEBUG] kdf_kausf inputs: SNN(len=%zu, head='%.*s'), SQN^AK(len=6)\n",
-        LOG_TAG,
-        sn_len_dbg,
-        (int)((sn_len_dbg > 16) ? 16 : sn_len_dbg),
-        serving_network_name);
-
-    printf("%s [TRACE] Kausf derivation:\n", LOG_TAG);
-    printf("%s [TRACE]   Key (CK||IK, 32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", key[i]);
-    printf("\n");
-    printf("%s [TRACE]   FC: 0x%02X\n", LOG_TAG, input[0]);
-    printf("%s [TRACE]   SNN: %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
-    printf("%s [TRACE]   SQN^AK: ", LOG_TAG);
-    for (int i = 0; i < 6; i++) printf("%02X", sqn_xor_ak[i]);
-    printf("\n");
+    LOG_TRACE("%s   FC: 0x%02X\n", LOG_TAG, input[0]);
+    LOG_TRACE("%s   SNN: %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
 
     unsigned int kausf_len = 32;
     uint8_t *result = HMAC(EVP_sha256(), key, sizeof(key), input, offset, kausf, &kausf_len);
 
     if (!result || kausf_len != 32) {
-        fprintf(stderr, "%s ERROR: Failed to compute Kausf\n", LOG_TAG);
+
         return -1;
     }
-
-    printf("%s [TRACE] Computed Kausf (32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", kausf[i]);
-    printf("\n");
-    printf("%s INFO: Computed Kausf (head 8B): ", LOG_TAG);
-    for (int i = 0; i < 8; i++) printf("%02X", kausf[i]);
-    printf("..\n");
 
     return 0;
 }
@@ -109,18 +90,18 @@ int s1n2_kdf_res_star_from_kausf(const uint8_t *kausf,
                                   const uint8_t *res, uint8_t res_len,
                                   uint8_t *res_star) {
     if (!kausf || !serving_network_name || !rand || !res || !res_star) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_res_star_from_kausf\n", LOG_TAG);
+
         return -1;
     }
 
     if (res_len < 4 || res_len > 16) {
-        fprintf(stderr, "%s ERROR: Invalid RES length: %u\n", LOG_TAG, res_len);
+        LOG_ERROR("%s ERROR: Invalid RES length: %u\n", LOG_TAG, res_len);
         return -1;
     }
 
     size_t sn_len = strlen(serving_network_name);
     if (sn_len == 0 || sn_len > 200) {
-        fprintf(stderr, "%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
+        LOG_ERROR("%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
         return -1;
     }
 
@@ -147,38 +128,22 @@ int s1n2_kdf_res_star_from_kausf(const uint8_t *kausf,
     input[offset++] = (res_length >> 8) & 0xFF;
     input[offset++] = res_length & 0xFF;
 
-    printf("%s [TRACE] RES* derivation (TS 33.501 Annex A.4):\n", LOG_TAG);
-    printf("%s [TRACE]   Key (Kausf, 32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", kausf[i]);
-    printf("\n");
-    printf("%s [TRACE]   FC: 0x%02X\n", LOG_TAG, input[0]);
-    printf("%s [TRACE]   P0 (SNN): %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
-    printf("%s [TRACE]   P1 (RAND, 16 bytes): ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", rand[i]);
-    printf("\n");
-    printf("%s [TRACE]   P2 (RES, %u bytes): ", LOG_TAG, res_len);
-    for (int i = 0; i < res_len; i++) printf("%02X", res[i]);
-    printf("\n");
+    LOG_TRACE("%s RES* derivation (TS 33.501 Annex A.4):\n", LOG_TAG);
+
+    LOG_TRACE("%s   FC: 0x%02X\n", LOG_TAG, input[0]);
+    LOG_TRACE("%s   P0 (SNN): %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
 
     uint8_t temp[32];
     unsigned int temp_len = sizeof(temp);
     uint8_t *result = HMAC(EVP_sha256(), kausf, 32, input, offset, temp, &temp_len);
 
     if (!result || temp_len != sizeof(temp)) {
-        fprintf(stderr, "%s ERROR: Failed to compute RES* from Kausf\n", LOG_TAG);
+
         return -1;
     }
 
-    printf("%s [TRACE]   HMAC-SHA-256 output (32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", temp[i]);
-    printf("\n");
-
     /* Take the last 128 bits (16 bytes) as RES* */
     memcpy(res_star, temp + 16, 16);
-
-    char hex_res_star[33];
-    s1n2_auth_bytes_to_hex(res_star, 16, hex_res_star);
-    printf("%s INFO: Computed RES* (from Kausf): %s\n", LOG_TAG, hex_res_star);
 
     return 0;
 }
@@ -193,18 +158,18 @@ int s1n2_kdf_res_star_from_ck_ik(const uint8_t *ck, const uint8_t *ik,
                                   const uint8_t *res, uint8_t res_len,
                                   uint8_t *res_star) {
     if (!ck || !ik || !serving_network_name || !rand || !res || !res_star) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_res_star_from_ck_ik\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter in kdf_res_star_from_ck_ik\n", LOG_TAG);
         return -1;
     }
 
     if (res_len < 4 || res_len > 16) {
-        fprintf(stderr, "%s ERROR: Invalid RES length: %u\n", LOG_TAG, res_len);
+        LOG_ERROR("%s ERROR: Invalid RES length: %u\n", LOG_TAG, res_len);
         return -1;
     }
 
     size_t sn_len = strlen(serving_network_name);
     if (sn_len == 0 || sn_len > 200) {
-        fprintf(stderr, "%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
+        LOG_ERROR("%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
         return -1;
     }
 
@@ -236,38 +201,21 @@ int s1n2_kdf_res_star_from_ck_ik(const uint8_t *ck, const uint8_t *ik,
     input[offset++] = (res_length >> 8) & 0xFF;
     input[offset++] = res_length & 0xFF;
 
-    printf("%s [TRACE] RES* derivation (Open5GS v2.7.2 bug compatibility mode):\n", LOG_TAG);
-    printf("%s [TRACE]   Key (CK||IK, 32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", key_ck_ik[i]);
-    printf("\n");
-    printf("%s [TRACE]   **WARNING**: Using CK||IK instead of Kausf (non-standard!)\n", LOG_TAG);
-    printf("%s [TRACE]   FC: 0x%02X\n", LOG_TAG, input[0]);
-    printf("%s [TRACE]   P0 (SNN): %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
-    printf("%s [TRACE]   P1 (RAND, 16 bytes): ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", rand[i]);
-    printf("\n");
-    printf("%s [TRACE]   P2 (RES, %u bytes): ", LOG_TAG, res_len);
-    for (int i = 0; i < res_len; i++) printf("%02X", res[i]);
-    printf("\n");
+    LOG_TRACE("%s RES* derivation (Open5GS v2.7.2 bug compatibility mode):\n", LOG_TAG);
+
+    LOG_TRACE("%s   FC: 0x%02X\n", LOG_TAG, input[0]);
+    LOG_TRACE("%s   P0 (SNN): %s (len=%zu)\n", LOG_TAG, serving_network_name, sn_len);
 
     uint8_t temp[32];
     unsigned int temp_len = sizeof(temp);
     uint8_t *result = HMAC(EVP_sha256(), key_ck_ik, 32, input, offset, temp, &temp_len);
 
     if (!result || temp_len != sizeof(temp)) {
-        fprintf(stderr, "%s ERROR: Failed to compute RES* from CK||IK\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: Failed to compute RES* from CK||IK\n", LOG_TAG);
         return -1;
     }
 
-    printf("%s [TRACE]   HMAC-SHA-256 output (32 bytes): ", LOG_TAG);
-    for (int i = 0; i < 32; i++) printf("%02X", temp[i]);
-    printf("\n");
-
     memcpy(res_star, temp + 16, 16);
-
-    char hex_res_star[33];
-    s1n2_auth_bytes_to_hex(res_star, 16, hex_res_star);
-    printf("%s INFO: Computed RES* (from CK||IK, Open5GS compat mode): %s\n", LOG_TAG, hex_res_star);
 
     return 0;
 }
@@ -280,13 +228,13 @@ int s1n2_kdf_kseaf(const uint8_t *kausf,
                    const char *serving_network_name,
                    uint8_t *kseaf) {
     if (!kausf || !serving_network_name || !kseaf) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_kseaf\n", LOG_TAG);
+
         return -1;
     }
 
     size_t sn_len = strlen(serving_network_name);
     if (sn_len == 0 || sn_len > 200) {
-        fprintf(stderr, "%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
+        LOG_ERROR("%s ERROR: Invalid serving network length: %zu\n", LOG_TAG, sn_len);
         return -1;
     }
 
@@ -305,13 +253,9 @@ int s1n2_kdf_kseaf(const uint8_t *kausf,
     uint8_t *result = HMAC(EVP_sha256(), kausf, 32, input, offset, kseaf, &kseaf_len);
 
     if (!result || kseaf_len != 32) {
-        fprintf(stderr, "%s ERROR: Failed to compute Kseaf\n", LOG_TAG);
+
         return -1;
     }
-
-    printf("%s [DEBUG] Kseaf derived successfully (head 8B): ", LOG_TAG);
-    for (int i = 0; i < 8; i++) printf("%02X", kseaf[i]);
-    printf("..\n");
 
     return 0;
 }
@@ -326,18 +270,18 @@ int s1n2_kdf_kamf(const uint8_t *kseaf,
                   uint8_t abba_len,
                   uint8_t *kamf) {
     if (!kseaf || !supi || !abba || !kamf) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_kamf\n", LOG_TAG);
+
         return -1;
     }
 
-    if (abba_len < 2 || abba_len > 256) {
-        fprintf(stderr, "%s ERROR: Invalid ABBA length: %u\n", LOG_TAG, abba_len);
+    if (abba_len < 2) {
+        LOG_ERROR("%s ERROR: Invalid ABBA length: %u\n", LOG_TAG, abba_len);
         return -1;
     }
 
     size_t supi_len = strlen(supi);
     if (supi_len == 0 || supi_len > 200) {
-        fprintf(stderr, "%s ERROR: Invalid SUPI length: %zu\n", LOG_TAG, supi_len);
+
         return -1;
     }
 
@@ -373,18 +317,9 @@ int s1n2_kdf_kamf(const uint8_t *kseaf,
     uint8_t *result = HMAC(EVP_sha256(), kseaf, 32, input, offset, kamf, &kamf_len);
 
     if (!result || kamf_len != 32) {
-        fprintf(stderr, "%s ERROR: Failed to compute Kamf\n", LOG_TAG);
+
         return -1;
     }
-
-    printf("%s [DEBUG] kdf_kamf inputs: SUPI='%s' (value='%s'), ABBA(len=%u): ",
-        LOG_TAG, supi, supi_value ? supi_value : "(null)", abba_len);
-    for (int i = 0; i < abba_len && i < 8; i++) printf("%02X", abba[i]);
-    if (abba_len > 8) printf("..");
-    printf("\n");
-    printf("%s [DEBUG] Kamf derived successfully (head 8B): ", LOG_TAG);
-    for (int i = 0; i < 8; i++) printf("%02X", kamf[i]);
-    printf("..\n");
 
     return 0;
 }
@@ -398,7 +333,7 @@ int s1n2_kdf_nas_5g(const uint8_t *kamf,
                     uint8_t algorithm_id,
                     uint8_t *key_out) {
     if (!kamf || !key_out) {
-        fprintf(stderr, "%s ERROR: NULL parameter in kdf_nas_5g\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter in kdf_nas_5g\n", LOG_TAG);
         return -1;
     }
 
@@ -423,49 +358,12 @@ int s1n2_kdf_nas_5g(const uint8_t *kamf,
     uint8_t *result = HMAC(EVP_sha256(), kamf, 32, input, offset, output, &output_len);
 
     if (!result || output_len != 32) {
-        fprintf(stderr, "%s ERROR: Failed to compute 5G NAS key\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: Failed to compute 5G NAS key\n", LOG_TAG);
         return -1;
-    }
-
-    /* Optional deep debug */
-    const char *alt_dbg = getenv("S1N2_NAS5G_DEBUG_ALT");
-    if (alt_dbg && (*alt_dbg == '1' || *alt_dbg == 'y' || *alt_dbg == 'Y')) {
-        printf("%s [DEBUG] NAS5G-KDF input(%zuB): ", LOG_TAG, offset);
-        for (size_t i = 0; i < offset; ++i) printf("%02X", input[i]);
-        printf("  (FC=0x69, type=0x%02X, id=0x%02X)\n", algorithm_type, algorithm_id);
-
-        uint8_t tmp_out[32];
-        unsigned int tmp_len = sizeof(tmp_out);
-
-        #define NAS5G_SHOW_VARIANT(TYP, OFF) \
-            do { \
-                uint8_t in2[16]; size_t of2 = 0; \
-                in2[of2++] = 0x69; \
-                in2[of2++] = (uint8_t)(TYP); \
-                in2[of2++] = 0x00; in2[of2++] = 0x01; \
-                in2[of2++] = algorithm_id; \
-                in2[of2++] = 0x00; in2[of2++] = 0x01; \
-                tmp_len = sizeof(tmp_out); \
-                if (!HMAC(EVP_sha256(), kamf, 32, in2, of2, tmp_out, &tmp_len) || tmp_len != 32) break; \
-                printf("%s [DEBUG] NAS5G variant type=0x%02X, off=%d head8=", LOG_TAG, (uint8_t)(TYP), (int)(OFF)); \
-                for (int vi = 0; vi < 8; ++vi) printf("%02X", tmp_out[(OFF)+vi]); \
-                printf("..\n"); \
-            } while (0)
-
-        NAS5G_SHOW_VARIANT(0x01, 0);
-        NAS5G_SHOW_VARIANT(0x01, 16);
-        NAS5G_SHOW_VARIANT(0x02, 0);
-        NAS5G_SHOW_VARIANT(0x02, 16);
-        #undef NAS5G_SHOW_VARIANT
     }
 
     /* Per TS 33.501 A.8 and Open5GS implementation, take bytes [16:31] */
     memcpy(key_out, output + 16, 16);
-
-    printf("%s [DEBUG] 5G NAS key derived (type=0x%02X, alg=%u, head 8B): ",
-        LOG_TAG, algorithm_type, algorithm_id);
-    for (int i = 0; i < 8; i++) printf("%02X", key_out[i]);
-    printf("..\n");
 
     memset(output, 0, sizeof(output));
 
@@ -484,15 +382,13 @@ int s1n2_auth_compute_res_star_with_imsi(s1n2_auth_context_t *auth_ctx,
                                           uint8_t res_4g_len,
                                           uint8_t *res_star) {
     if (!auth_ctx || !imsi || !rand || !sqn_xor_ak || !res_4g || !res_star) {
-        fprintf(stderr, "%s ERROR: NULL parameter in compute_res_star_with_imsi\n", LOG_TAG);
+
         return -1;
     }
 
-    printf("%s INFO: Computing RES* for IMSI=%s\n", LOG_TAG, imsi);
-
     s1n2_subscriber_keys_t *keys = s1n2_auth_get_keys(auth_ctx, imsi);
     if (!keys || !keys->configured) {
-        fprintf(stderr, "%s ERROR: No keys configured for IMSI: %s\n", LOG_TAG, imsi);
+
         return -1;
     }
 
@@ -503,8 +399,7 @@ int s1n2_auth_compute_res_star_with_imsi(s1n2_auth_context_t *auth_ctx,
     bool use_xor_conversion = auth_ctx->xor_to_milenage_conversion;
 
     if (use_xor_conversion && res_4g_len == 8) {
-        printf("%s INFO: XOR Algorithm Conversion Mode ENABLED\n", LOG_TAG);
-        printf("%s      Deriving Ki from XOR RES and converting to Milenage\n", LOG_TAG);
+        LOG_INFO("%s INFO: XOR Algorithm Conversion Mode ENABLED\n", LOG_TAG);
 
         uint8_t ki_derived[16];
         memcpy(ki_derived, keys->ki, 16);
@@ -513,90 +408,46 @@ int s1n2_auth_compute_res_star_with_imsi(s1n2_auth_context_t *auth_ctx,
             ki_derived[i] = res_4g[i] ^ rand[i];
         }
 
-        printf("%s [TRACE] Derived Ki from XOR: ", LOG_TAG);
-        for (int i = 0; i < 16; i++) printf("%02X", ki_derived[i]);
-        printf("\n");
-
         s1n2_milenage_f2345(keys->opc, ki_derived, rand, res_computed, ck, ik, ak);
 
-        printf("%s INFO: Converted XOR RES to Milenage RES\n", LOG_TAG);
+        LOG_INFO("%s INFO: Converted XOR RES to Milenage RES\n", LOG_TAG);
     } else {
         s1n2_milenage_f2345(keys->opc, keys->ki, rand, res_computed, ck, ik, ak);
     }
 
-    printf("%s INFO: Computed CK, IK, and RES from Ki+RAND using Milenage\n", LOG_TAG);
-    printf("%s [TRACE] Ki:  ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", keys->ki[i]);
-    printf("\n");
-    printf("%s [TRACE] OPc: ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", keys->opc[i]);
-    printf("\n");
-    printf("%s [TRACE] RAND:", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", rand[i]);
-    printf("\n");
-    printf("%s [TRACE] Computed CK (16 bytes): ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", ck[i]);
-    printf("\n");
-    printf("%s [TRACE] Computed IK (16 bytes): ", LOG_TAG);
-    for (int i = 0; i < 16; i++) printf("%02X", ik[i]);
-    printf("\n");
-    printf("%s DEBUG: Computed RES (8 bytes): ", LOG_TAG);
-    for (int i = 0; i < 8; i++) {
-        printf("%02X", res_computed[i]);
-    }
-    printf("\n");
-    printf("%s DEBUG: Received 4G UE RES (%u bytes): ", LOG_TAG, res_4g_len);
-    for (int i = 0; i < res_4g_len && i < 16; i++) {
-        printf("%02X", res_4g[i]);
-    }
-    printf("\n");
-
     if (res_4g_len == 8) {
         if (memcmp(res_computed, res_4g, 8) != 0) {
-            printf("%s ERROR: 4G UE RES does NOT match Milenage RES computed from configured Ki/OPc\n", LOG_TAG);
-            printf("%s        This indicates a subscriber key mismatch between s1n2 and UE/UDM.\n", LOG_TAG);
-            printf("%s        Fix by aligning Ki/OPc for IMSI=%s in %s (or environment variables).\n", LOG_TAG, imsi, "AUTH_CONFIG_FILE");
-            printf("%s        RES_computed: ", LOG_TAG);
-            for (int i = 0; i < 8; i++) printf("%02X", res_computed[i]);
-            printf("  UE_RES: ");
-            for (int i = 0; i < 8; i++) printf("%02X", res_4g[i]);
-            printf("\n");
+
+            LOG_INFO("%s        This indicates a subscriber key mismatch between s1n2 and UE/UDM.\n", LOG_TAG);
+
         } else {
-            printf("%s INFO: 4G UE RES matches Milenage output — Ki/OPc parity looks OK.\n", LOG_TAG);
+
         }
     }
-
-    printf("%s DEBUG: Using SQN^AK from AUTN: ", LOG_TAG);
-    for (int i = 0; i < 6; i++) {
-        printf("%02X", sqn_xor_ak[i]);
-    }
-    printf("\n");
 
     uint8_t kausf[32];
     const char *serving_network = "5G:mnc001.mcc001.3gppnetwork.org";
 
     if (s1n2_kdf_kausf(ck, ik, sqn_xor_ak, serving_network, kausf) != 0) {
-        fprintf(stderr, "%s ERROR: Failed to compute Kausf\n", LOG_TAG);
+
         return -1;
     }
 
-    printf("%s INFO: Computed Kausf from CK||IK\n", LOG_TAG);
-
     int kdf_result = -1;
     if (auth_ctx->res_star_kdf_mode == RES_STAR_KDF_OPEN5GS_COMPAT) {
-        printf("%s INFO: Using Open5GS compatibility mode (CK||IK-based KDF)\n", LOG_TAG);
+        LOG_INFO("%s INFO: Using Open5GS compatibility mode (CK||IK-based KDF)\n", LOG_TAG);
         kdf_result = s1n2_kdf_res_star_from_ck_ik(ck, ik, serving_network, rand, res_computed, 8, res_star);
     } else {
-        printf("%s INFO: Using standard TS 33.501 mode (Kausf-based KDF)\n", LOG_TAG);
+
         kdf_result = s1n2_kdf_res_star_from_kausf(kausf, serving_network, rand, res_computed, 8, res_star);
     }
 
     if (kdf_result != 0) {
-        fprintf(stderr, "%s ERROR: Failed to compute RES*\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: Failed to compute RES*\n", LOG_TAG);
         return -1;
     }
 
-    printf("%s SUCCESS: RES* computation complete\n", LOG_TAG);
+    LOG_INFO("%s SUCCESS: RES* computation complete\n", LOG_TAG);
 
     return 0;
 }

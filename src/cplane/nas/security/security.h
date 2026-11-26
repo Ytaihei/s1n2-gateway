@@ -19,8 +19,8 @@
  * @see 3GPP TS 24.501 (NAS for 5GS)
  * @see 3GPP TS 33.401 / TS 33.501 (Security)
  */
-#ifndef S1N2_SECURITY_H
-#define S1N2_SECURITY_H
+#ifndef S1N2_SECURITY_MODULE_H
+#define S1N2_SECURITY_MODULE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -48,11 +48,16 @@ extern "C" {
  */
 int s1n2_try_derive_4g_nas_keys(s1n2_context_t *ctx, ue_id_mapping_t *ue_map);
 
+/* EPS NAS protection processing, independent of the S1AP envelope. */
+int nas_4g_security_unwrap(s1n2_context_t *ctx, ue_id_mapping_t *ue_map,
+    const uint8_t *nas_buf, size_t nas_len, uint8_t *decrypted_buf,
+    size_t decrypted_capacity, const uint8_t **plain, size_t *plain_len);
+
 /**
  * @brief Unwrap 5G NAS security header (MAC verify + decrypt)
  *
- * Processes 5G DL NAS security header: verifies MAC (NIA2) and decrypts
- * payload (NEA2).  Returns pointer to plain NAS message.  For Security
+ * Processes 5G DL NAS security header: verifies MAC and decrypts
+ * payload using the negotiated NIA/NEA.  Returns pointer to plain NAS message.  For Security
  * Mode Command, returns the message as-is (plain pass-through).
  *
  * @param nas_5g              Input 5G NAS PDU
@@ -157,4 +162,4 @@ extern const uint8_t s1n2_nia_to_eia_map[8];
 }
 #endif
 
-#endif /* S1N2_SECURITY_H */
+#endif /* S1N2_SECURITY_MODULE_H */

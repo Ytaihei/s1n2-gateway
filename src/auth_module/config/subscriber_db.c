@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file subscriber_db.c
  * @brief Subscriber database management
@@ -44,13 +45,13 @@ static bool s1n2_auth_is_valid_imsi(const char *imsi) {
 
 static int compute_opc_from_op(const uint8_t *ki, const uint8_t *op, uint8_t *opc) {
     if (!ki || !op || !opc) {
-        fprintf(stderr, "%s ERROR: NULL parameter in compute_opc_from_op\n", LOG_TAG);
+        LOG_ERROR("%s ERROR: NULL parameter in compute_opc_from_op\n", LOG_TAG);
         return -1;
     }
 
     AES_KEY aes_key;
     if (AES_set_encrypt_key(ki, 128, &aes_key) != 0) {
-        fprintf(stderr, "%s ERROR: Failed to initialise AES key for OPc computation\n", LOG_TAG);
+
         return -1;
     }
 
@@ -83,7 +84,7 @@ static s1n2_subscriber_keys_t* s1n2_auth_get_or_create_subscriber(s1n2_auth_cont
     }
 
     if (auth_ctx->subscriber_count >= (int)(sizeof(auth_ctx->subscribers) / sizeof(auth_ctx->subscribers[0]))) {
-        fprintf(stderr, "%s ERROR: Subscriber table full, cannot register IMSI %s\n", LOG_TAG, imsi);
+
         return NULL;
     }
 
@@ -110,13 +111,13 @@ int s1n2_auth_register_subscriber(s1n2_auth_context_t *auth_ctx,
     }
 
     if (!s1n2_auth_is_valid_imsi(imsi)) {
-        fprintf(stderr, "%s WARN: Invalid IMSI '%s' from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
         return 0;
     }
 
     uint8_t ki[16];
     if (s1n2_auth_hex_to_bytes(ki_hex, ki, sizeof(ki)) != 0) {
-        fprintf(stderr, "%s WARN: Invalid Ki for IMSI %s from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
         return 0;
     }
 
@@ -127,25 +128,25 @@ int s1n2_auth_register_subscriber(s1n2_auth_context_t *auth_ctx,
         if (s1n2_auth_hex_to_bytes(opc_hex, opc, sizeof(opc)) == 0) {
             opc_available = true;
         } else {
-            fprintf(stderr, "%s WARN: Invalid OPc for IMSI %s from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
             return 0;
         }
     }
 
     if (!opc_available) {
         if (!op_hex || !*op_hex) {
-            fprintf(stderr, "%s WARN: Missing OP/OPc for IMSI %s from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
             return 0;
         }
 
         uint8_t op[16];
         if (s1n2_auth_hex_to_bytes(op_hex, op, sizeof(op)) != 0) {
-            fprintf(stderr, "%s WARN: Invalid OP for IMSI %s from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
             return 0;
         }
 
         if (compute_opc_from_op(ki, op, opc) != 0) {
-            fprintf(stderr, "%s ERROR: Failed to derive OPc for IMSI %s from %s\n", LOG_TAG, imsi, source_label ? source_label : "environment");
+
             return 0;
         }
         opc_available = true;
@@ -161,11 +162,7 @@ int s1n2_auth_register_subscriber(s1n2_auth_context_t *auth_ctx,
     memcpy(subscriber->opc, opc, sizeof(opc));
     subscriber->configured = true;
 
-    if (created) {
-        printf("%s INFO: Registered subscriber IMSI %s from %s\n", LOG_TAG, subscriber->imsi, source_label ? source_label : "environment");
-    } else {
-        printf("%s INFO: Updated subscriber IMSI %s from %s\n", LOG_TAG, subscriber->imsi, source_label ? source_label : "environment");
-    }
+    LOG_DEBUG("Subscriber credentials %s", created ? "added" : "updated");
 
     return 1;
 }
@@ -182,12 +179,11 @@ s1n2_subscriber_keys_t* s1n2_auth_get_keys(s1n2_auth_context_t *auth_ctx, const 
     for (int i = 0; i < auth_ctx->subscriber_count; i++) {
         if (strcmp(auth_ctx->subscribers[i].imsi, imsi) == 0) {
             if (auth_ctx->audit_logging) {
-                printf("%s INFO: Retrieved keys for IMSI: %s\n", LOG_TAG, imsi);
+                LOG_DEBUG("Subscriber credential lookup succeeded");
             }
             return &auth_ctx->subscribers[i];
         }
     }
 
-    fprintf(stderr, "%s ERROR: No keys found for IMSI: %s\n", LOG_TAG, imsi);
     return NULL;
 }

@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file initial_ue_builder.c
  * @brief NGAP InitialUEMessage builder using asn1c structures
@@ -36,12 +37,7 @@
 #include <aper_encoder.h>
 
 static void hexdump(const char *tag, const uint8_t *buf, size_t len) {
-    printf("[HEX] %s (%zu): ", tag, len);
-    for (size_t i = 0; i < len; ++i) {
-        printf("%02X", buf[i]);
-        if (i + 1 < len) putchar(' ');
-    }
-    putchar('\n');
+
 }
 
 // PLMN: MCC/MNC -> 3 octet BCD (TS 38.413 Annex) helper
@@ -131,7 +127,7 @@ static int build_initial_ue_message_internal(uint8_t *buf, size_t *len,
     OCTET_STRING_fromBuf(&nR_CGI->pLMNIdentity, (char*)plmn_enc, 3);
     nR_CGI->nRCellIdentity.size = 5;
     nR_CGI->nRCellIdentity.buf = calloc(5, sizeof(uint8_t));
-    nR_CGI->nRCellIdentity.buf[0] = (nr_cell_id >> 32) & 0xFF;
+    nR_CGI->nRCellIdentity.buf[0] = ((uint64_t)nr_cell_id >> 32) & 0xFF;
     nR_CGI->nRCellIdentity.buf[1] = (nr_cell_id >> 24) & 0xFF;
     nR_CGI->nRCellIdentity.buf[2] = (nr_cell_id >> 16) & 0xFF;
     nR_CGI->nRCellIdentity.buf[3] = (nr_cell_id >> 8) & 0xFF;
@@ -206,16 +202,16 @@ static int build_initial_ue_message_internal(uint8_t *buf, size_t *len,
 
     // Validate constraints for better diagnostics
     if (asn_check_constraints(&asn_DEF_NGAP_NGAP_PDU, &pdu, NULL, NULL) != 0) {
-        printf("[ERROR] NGAP InitialUEMessage constraint check failed\n");
-        fflush(stdout);
+        LOG_ERROR("NGAP InitialUEMessage constraint check failed\n");
+
         return -1;
     }
 
     // Direct APER encoding
     asn_enc_rval_t er = aper_encode_to_buffer(&asn_DEF_NGAP_NGAP_PDU, NULL, &pdu, buf, *len);
     if (er.encoded == -1) {
-        printf("[ERROR] aper_encode_to_buffer failed: %s\n", strerror(errno));
-        fflush(stdout);
+        LOG_ERROR("aper_encode_to_buffer failed: %s\n", strerror(errno));
+
         return -1;
     }
 

@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file auth/auth_helpers.c
  * @brief Helper functions for Authentication module
@@ -31,7 +32,7 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 	size_t offset = 0;
 
 	if (nas_pdu[offset] != 0x7E) {
-		printf("[WARN] Not a 5G NAS message (EPD=0x%02X)\n", nas_pdu[offset]);
+		LOG_WARN("Not a 5G NAS message (EPD=0x%02X)\n", nas_pdu[offset]);
 		return -1;
 	}
 	offset++;
@@ -39,12 +40,12 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 	offset++;
 
 	if (nas_pdu[offset] != 0x56) {
-		printf("[DEBUG] Not an Authentication Request (type=0x%02X)\n", nas_pdu[offset]);
+		LOG_DEBUG("Not an Authentication Request (type=0x%02X)\n", nas_pdu[offset]);
 		return -1;
 	}
 	offset++;
 
-	printf("[INFO] 5G Authentication Request detected, extracting RAND...\n");
+	LOG_INFO("5G Authentication Request detected, extracting RAND...\n");
 
 	if (offset >= nas_len) return -1;
 	offset++;  // Skip ngKSI
@@ -57,10 +58,10 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 	if (ue_map && abba_len >= 2 && offset + abba_len <= nas_len) {
 		memcpy(ue_map->abba, &nas_pdu[offset], 2);
 		ue_map->abba_len = 2;
-		printf("[INFO] Cached ABBA (from 5G AuthReq): %02X %02X (len=%u)\n",
+		LOG_INFO("Cached ABBA (from 5G AuthReq): %02X %02X (len=%u)\n",
 			   ue_map->abba[0], ue_map->abba[1], (unsigned)ue_map->abba_len);
 	} else {
-		printf("[DEBUG] ABBA not cached from AuthReq (abba_len=%u, remain=%zu, have_ue_map=%d)\n",
+		LOG_DEBUG("ABBA not cached from AuthReq (abba_len=%u, remain=%zu, have_ue_map=%d)\n",
 			   (unsigned)abba_len,
 			   (offset + abba_len <= nas_len) ? (nas_len - (offset + abba_len)) : 0,
 			   ue_map ? 1 : 0);
@@ -75,7 +76,7 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 
 		if (iei == 0x21) {
 			if (offset + 16 > nas_len) {
-				printf("[ERROR] RAND truncated\n");
+				LOG_ERROR("RAND truncated\n");
 				return -1;
 			}
 			if (rand_out) {
@@ -83,19 +84,15 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 			}
 			offset += 16;
 			rand_found = true;
-			printf("[INFO] RAND extracted: ");
-			for (int i = 0; i < 16; i++) {
-				printf("%02X", rand_out ? rand_out[i] : nas_pdu[offset - 16 + i]);
-			}
-			printf("\n");
+
 		} else if (iei == 0x20) {
 			if (offset >= nas_len) {
-				printf("[ERROR] AUTN length missing\n");
+				LOG_ERROR("AUTN length missing\n");
 				return -1;
 			}
 			uint8_t autn_len = nas_pdu[offset++];
 			if (offset + autn_len > nas_len) {
-				printf("[ERROR] AUTN truncated (len=%u, remaining=%zu)\n", autn_len, nas_len - offset);
+				LOG_ERROR("AUTN truncated (len=%u, remaining=%zu)\n", autn_len, nas_len - offset);
 				return -1;
 			}
 			if (autn_out && autn_len >= 16) {
@@ -106,20 +103,13 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 			}
 			offset += autn_len;
 			autn_found = true;
-			if (sqn_xor_ak_out) {
-				printf("[INFO] AUTN extracted. SQN^AK: ");
-				for (int i = 0; i < 6; i++) {
-					printf("%02X", sqn_xor_ak_out[i]);
-				}
-				printf("\n");
-			}
 		} else {
 			if (offset >= nas_len) {
 				break;
 			}
 			uint8_t len = nas_pdu[offset++];
 			if (offset + len > nas_len) {
-				printf("[WARN] Skipping truncated IEI=0x%02X\n", iei);
+				LOG_WARN("Skipping truncated IEI=0x%02X\n", iei);
 				return -1;
 			}
 			offset += len;
@@ -130,6 +120,6 @@ int s1n2_extract_rand_autn_from_5g_auth_request(const uint8_t *nas_pdu, size_t n
 		}
 	}
 
-	printf("[WARN] Failed to extract complete RAND/AUTN from Authentication Request\n");
+	LOG_WARN("Failed to extract complete RAND/AUTN from Authentication Request\n");
 	return -1;
 }

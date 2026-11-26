@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /*
  * initial_ue_message.c – S1AP InitialUEMessage to NGAP conversion
  */
@@ -50,8 +51,8 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
             }
         }
     } else {
-        printf("[WARN] Failed to decode InitialUEMessage for eNB UE ID (code=%d)\n", s1_dr.code);
-        fflush(stdout);
+        LOG_WARN("Failed to decode InitialUEMessage for eNB UE ID (code=%d)\n", s1_dr.code);
+
     }
 
     if (decoded_pdu) {
@@ -59,10 +60,10 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
     }
 
     if (enb_ue_s1ap_id > 0) {
-        printf("[INFO] Extracted eNB_UE_S1AP_ID=%ld from InitialUEMessage\n", enb_ue_s1ap_id);
+        LOG_INFO("Extracted eNB_UE_S1AP_ID=%ld from InitialUEMessage\n", enb_ue_s1ap_id);
     } else {
         enb_ue_s1ap_id = 1;
-        printf("[WARN] Using fallback eNB_UE_S1AP_ID=%ld\n", enb_ue_s1ap_id);
+        LOG_WARN("Using fallback eNB_UE_S1AP_ID=%ld\n", enb_ue_s1ap_id);
     }
 
     uint8_t initial_ue[] = {
@@ -111,23 +112,23 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
         if (s1ap_data[i] == 0x7E) {
             nas_start = i;
             nas_length = (s1ap_len - i) > 64 ? 64 : (s1ap_len - i);
-            printf("[DEBUG] Detected 5G NAS-PDU at offset %zu (0x7E)\n", i);
+            LOG_DEBUG("Detected 5G NAS-PDU at offset %zu (0x7E)\n", i);
             break;
         } else if (s1ap_data[i] == 0x0C && (i + 1) < s1ap_len && s1ap_data[i + 1] == 0x07) {
             nas_start = i;
             nas_length = (s1ap_len - i) > 64 ? 64 : (s1ap_len - i);
-            printf("[DEBUG] Detected 4G Attach Request at offset %zu (0x0C 0x07)\n", i);
+            LOG_DEBUG("Detected 4G Attach Request at offset %zu (0x0C 0x07)\n", i);
             break;
         } else if ((s1ap_data[i] & 0x0F) == 0x07 && (i + 1) < s1ap_len) {
             uint8_t msg_type = s1ap_data[i + 1];
-            printf("[DEBUG] Detected 4G EMM message at offset %zu (PD=0x07, msg_type=0x%02X)\n",
+            LOG_DEBUG("Detected 4G EMM message at offset %zu (PD=0x07, msg_type=0x%02X)\n",
                    i, msg_type);
             // Convert common 4G EMM messages
             if (msg_type == 0x41 || msg_type == 0x45 || msg_type == 0x43 ||
                 msg_type == 0x44 || msg_type == 0x46 || msg_type == 0x5D || msg_type == 0x5E) {
                 nas_start = i;
                 nas_length = (s1ap_len - i) > 64 ? 64 : (s1ap_len - i);
-                printf("[DEBUG] 4G EMM message (0x%02X) selected for conversion\n", msg_type);
+                LOG_DEBUG("4G EMM message (0x%02X) selected for conversion\n", msg_type);
                 break;
             }
         }
@@ -139,11 +140,11 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
         nas_source = nas_ie_copy;
         nas_source_len = nas_ie_copy_len;
         nas_length = nas_ie_copy_len;
-        printf("[DEBUG] Using NAS-PDU extracted via ASN.1 decode (len=%zu)\n", nas_source_len);
+        LOG_DEBUG("Using NAS-PDU extracted via ASN.1 decode (len=%zu)\n", nas_source_len);
     } else if (nas_length > 0) {
         nas_source = s1ap_data + nas_start;
         nas_source_len = nas_length;
-        printf("[DEBUG] Using NAS-PDU located via heuristic scan (offset=%zu, len=%zu)\n",
+        LOG_DEBUG("Using NAS-PDU located via heuristic scan (offset=%zu, len=%zu)\n",
                nas_start, nas_length);
     }
 
@@ -195,23 +196,22 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
 
     if (idx_ranue_id >= 0) {
         SET_BE32(initial_ue, (size_t)idx_ranue_id, (uint32_t)enb_ue_s1ap_id);
-        printf("[DEBUG] Patched template RAN-UE-NGAP-ID with eNB UE ID %ld at offset %zd\n",
+        LOG_DEBUG("Patched template RAN-UE-NGAP-ID with eNB UE ID %ld at offset %zd\n",
                enb_ue_s1ap_id, idx_ranue_id);
     } else {
-        printf("[WARN] Failed to locate RAN-UE-NGAP-ID field in template; continuing with default\n");
+        LOG_WARN("Failed to locate RAN-UE-NGAP-ID field in template; continuing with default\n");
     }
 
-    printf("[DEBUG] Template InitialUEMessage: nas_length=%zu, idx_nas_payload=%zd\n",
+    LOG_DEBUG("Template InitialUEMessage: nas_length=%zu, idx_nas_payload=%zd\n",
            nas_length, idx_nas_payload);
-    printf("[DEBUG] Template search results: idx_len_outer=%zd, idx_len_mid=%zd, idx_len_iecontainer=%zd\n",
+    LOG_DEBUG("Template search results: idx_len_outer=%zd, idx_len_mid=%zd, idx_len_iecontainer=%zd\n",
            idx_len_outer, idx_len_mid, idx_len_iecontainer);
-    printf("[DEBUG] NAS template positions: idx_nas_ie_len=%zd, idx_nas_len=%zd, idx_nas_payload=%zd\n",
+    LOG_DEBUG("NAS template positions: idx_nas_ie_len=%zd, idx_nas_len=%zd, idx_nas_payload=%zd\n",
            idx_nas_ie_len, idx_nas_len, idx_nas_payload);
-    printf("[DEBUG] Condition check: (nas_length > 0 && idx_nas_payload > 0) = (%s && %s) = %s\n",
+    LOG_DEBUG("Condition check: (nas_length > 0 && idx_nas_payload > 0) = (%s && %s) = %s\n",
            nas_length > 0 ? "true" : "false",
            idx_nas_payload > 0 ? "true" : "false",
            (nas_length > 0 && idx_nas_payload > 0) ? "true" : "false");
-    fflush(stdout);
 
     if (nas_source && nas_length > 0 && idx_nas_payload > 0) {
         uint32_t new_nas_len = (uint32_t)nas_length;
@@ -226,13 +226,7 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
         if (idx_len_mid >= 0) SET_BE32(ngap_data, (size_t)idx_len_mid, (uint32_t)(0x74 + delta));
         if (idx_len_iecontainer >= 0) SET_BE32(ngap_data, (size_t)idx_len_iecontainer, (uint32_t)(0x70 + delta));
 
-        printf("[DEBUG] About to call NAS conversion for %zu bytes\n", nas_length);
-        printf("[DEBUG] NAS source buffer (first 16 bytes): ");
-        for (size_t dbg_i = 0; dbg_i < (nas_length < 16 ? nas_length : 16); ++dbg_i) {
-            printf("%02X ", nas_source[dbg_i]);
-        }
-        printf("\n");
-        fflush(stdout);
+        LOG_DEBUG("About to call NAS conversion for %zu bytes\n", nas_length);
 
         uint8_t converted_nas[256];
         memset(converted_nas, 0, sizeof(converted_nas)); // Initialize buffer to prevent garbage bytes
@@ -243,9 +237,8 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
                                  nas_length,
                                  converted_nas,
                                  &converted_nas_len) == 0) {
-            printf("[INFO] 4G->5G NAS-PDU conversion successful (4G:%zu bytes -> 5G:%zu bytes)\n",
+            LOG_INFO("4G->5G NAS-PDU conversion successful (4G:%zu bytes -> 5G:%zu bytes)\n",
                    nas_length, converted_nas_len);
-            fflush(stdout);
 
             new_nas_len = (uint32_t)converted_nas_len;
             delta = (int32_t)new_nas_len - (int32_t)old_nas_len;
@@ -262,8 +255,8 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
             // after Security Mode Complete (3GPP TS 24.501 § 5.5.1.2.4)
             // Note: We don't have ctx here, so we'll cache it in uplink_nas_transport where ctx is available
         } else {
-            printf("[WARN] 4G->5G NAS-PDU conversion failed, using original 4G NAS-PDU\n");
-            fflush(stdout);
+            LOG_WARN("4G->5G NAS-PDU conversion failed, using original 4G NAS-PDU\n");
+
             memcpy(ngap_data + head_len, nas_source, nas_length);
         }
 
@@ -272,18 +265,18 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
         size_t tail_len = sizeof(initial_ue) - tail_src_offset;
         memcpy(ngap_data + tail_dst_offset, initial_ue + tail_src_offset, tail_len);
         *ngap_len = head_len + nas_length + tail_len;
-        printf("[INFO] InitialUEMessage built with NAS-PDU from S1AP (len=%u, delta=%d)\n",
+        LOG_INFO("InitialUEMessage built with NAS-PDU from S1AP (len=%u, delta=%d)\n",
                new_nas_len, delta);
-        fflush(stdout);
+
     } else {
-        printf("[DEBUG] Taking ELSE path - attempting template with NAS replacement\n");
-        printf("[DEBUG] nas_length=%zu, idx_nas_payload=%zd\n", nas_length, idx_nas_payload);
+        LOG_DEBUG("Taking ELSE path - attempting template with NAS replacement\n");
+        LOG_DEBUG("nas_length=%zu, idx_nas_payload=%zd\n", nas_length, idx_nas_payload);
 
         memcpy(ngap_data, initial_ue, sizeof(initial_ue));
         *ngap_len = sizeof(initial_ue);
 
         if (nas_source && nas_length > 0) {
-            printf("[INFO] Template NAS conversion attempt for detected 4G NAS-PDU (%zu bytes)\n",
+            LOG_INFO("Template NAS conversion attempt for detected 4G NAS-PDU (%zu bytes)\n",
                    nas_length);
             uint8_t converted_nas[256];
             size_t converted_nas_len = 0;
@@ -293,7 +286,7 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
                                      nas_length,
                                      converted_nas,
                                      &converted_nas_len) == 0) {
-                printf("[INFO] Template 4G->5G NAS-PDU conversion successful (4G:%zu bytes -> 5G:%zu bytes)\n",
+                LOG_INFO("Template 4G->5G NAS-PDU conversion successful (4G:%zu bytes -> 5G:%zu bytes)\n",
                        nas_length, converted_nas_len);
 
                 const size_t template_nas_offset = 0x18;
@@ -301,7 +294,7 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
 
                 if (converted_nas_len <= template_nas_max_len &&
                     template_nas_offset + template_nas_max_len <= sizeof(initial_ue)) {
-                    printf("[INFO] Replacing template NAS-PDU with converted 5G NAS at offset 0x%zx\n",
+                    LOG_INFO("Replacing template NAS-PDU with converted 5G NAS at offset 0x%zx\n",
                            template_nas_offset);
 
                     ngap_data[template_nas_offset - 1] = (uint8_t)converted_nas_len;
@@ -313,23 +306,18 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
                                template_nas_max_len - converted_nas_len);
                     }
 
-                    printf("[HEX] Replaced template NAS at offset 0x%zx: ", template_nas_offset);
-                    for (size_t i = 0; i < converted_nas_len && i < 16; i++) {
-                        printf("%02X ", ngap_data[template_nas_offset + i]);
-                    }
-                    printf("\n");
                 } else {
-                    printf("[WARN] Converted NAS-PDU too large for template (%zu > %zu bytes)\n",
+                    LOG_WARN("Converted NAS-PDU too large for template (%zu > %zu bytes)\n",
                            converted_nas_len, template_nas_max_len);
                 }
             } else {
-                printf("[WARN] Template 4G->5G NAS-PDU conversion failed\n");
+                LOG_WARN("Template 4G->5G NAS-PDU conversion failed\n");
             }
-            fflush(stdout);
+
         } else {
-            printf("[WARN] Could not locate NAS-PDU in S1AP; using original template NAS in NGAP InitialUEMessage\n");
+            LOG_WARN("Could not locate NAS-PDU in S1AP; using original template NAS in NGAP InitialUEMessage\n");
         }
-        fflush(stdout);
+
     }
 
     const char *env_mcc = getenv("S1N2_MCC");
@@ -391,8 +379,8 @@ int s1n2_convert_initial_ue_message(uint8_t *s1ap_data, size_t s1ap_len,
 
     const char *env_name = getenv("S1N2_RAN_NAME");
     if (!env_name || !*env_name) env_name = "s1n2-gNB";
-    printf("[INFO] InitialUEMessage conversion complete for eNB UE ID %ld (RAN name: %s)\n",
+    LOG_INFO("InitialUEMessage conversion complete for eNB UE ID %ld (RAN name: %s)\n",
            enb_ue_s1ap_id, env_name);
-    fflush(stdout);
+
     return 0;
 }

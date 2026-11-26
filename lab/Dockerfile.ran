@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config libfftw3-dev libmbedtls-dev \
+    libboost-program-options-dev libconfig++-dev libsctp-dev libzmq3-dev \
+    iproute2 iputils-ping ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY sources/srsRAN_4G /src/srsRAN_4G
+RUN cmake -S /src/srsRAN_4G -B /src/srsRAN_4G/build \
+    -DCMAKE_BUILD_TYPE=Release -DENABLE_GUI=OFF -DENABLE_UHD=OFF \
+    -DENABLE_BLADERF=OFF -DENABLE_SOAPYSDR=OFF -DENABLE_SKIQ=OFF \
+    -DENABLE_HARDSIM=OFF -DENABLE_SRSEPC=OFF -DENABLE_ZEROMQ=ON \
+    -DENABLE_WERROR=OFF && \
+    cmake --build /src/srsRAN_4G/build --target srsenb srsue -j2
+ENV PATH="/src/srsRAN_4G/build/srsenb/src:/src/srsRAN_4G/build/srsue/src:${PATH}"

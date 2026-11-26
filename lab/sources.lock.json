@@ -1,0 +1,4 @@
+{
+  "open5gs": {"url": "https://github.com/open5gs/open5gs.git", "commit": "43fa4857cce8af6b6ec3c8e3b0cbf99444948f76"},
+  "srsRAN_4G": {"url": "https://github.com/srsran/srsRAN_4G.git", "commit": "eea87b1d893ae58e0b08bc381730c502024ae71f"}
+}

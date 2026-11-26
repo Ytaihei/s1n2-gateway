@@ -1,4 +1,5 @@
 .DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
 
 # ---- open5gs 取得設定 ----
 OPEN5GS_COMMIT := 234da30d930a5697f80fe248886ea6cec98ec12d
@@ -29,11 +30,11 @@ fetch-open5gs:
 	@echo "[INFO] open5gs fetched."
 
 CC := gcc
-CFLAGS := -O2 -g -Wall -Wextra -Wno-unused-parameter -std=c11 \
+CFLAGS := -O2 -g -Wall -Wextra -Wno-unused-parameter -std=c11 -D_POSIX_C_SOURCE=200809L \
 	-DASN_DISABLE_OER_SUPPORT -DASN_DISABLE_JER_SUPPORT -DASN_DISABLE_XER_SUPPORT \
 	-DASN_DISABLE_BER_SUPPORT -DASN_DISABLE_DER_SUPPORT \
 	-include ./include/ogs_compat.h \
-	-I./include -I./include/internal -I./src -I./src/cplane/nas -I./src/cplane/s1ap_ngap -I./src/cplane/s1ap_ngap/*/  -I./include/s1ap -I./open5gs/lib/asn1c/common -I./open5gs/lib/asn1c/ngap
+	-I./include -I./include/internal -I./src -I./src/cplane/nas -I./src/cplane/s1ap_ngap $(addprefix -I,$(wildcard src/cplane/s1ap_ngap/*/))  -I./include/s1ap -I./open5gs/lib/asn1c/common -I./open5gs/lib/asn1c/ngap
 # 将来 asn1c コード最小化時に -Os -ffunction-sections -Wl,--gc-sections などへ調整予定
 LDFLAGS := -lsctp -lssl -lcrypto -lyaml
 
@@ -59,67 +60,48 @@ ASN1_RUNTIME_SRCS := $(filter-out $(ASN1_RUNTIME_UNWANTED),$(ASN1_RUNTIME_SRCS_A
 print-asn1:
 	@echo "ASN1_RUNTIME_SRCS has $(words $(ASN1_RUNTIME_SRCS)) files"
 
-# 上記リストは存在するファイル名のみ残し、不足/余剰があれば調整 (簡便のため make 失敗時に再編集)
-
-# (方針変更) Open5GS の asn1c 生成 NGAP 実装を使用する
-# Argument list too long回避のため、静的ライブラリ方式に変更
-# NGAP_ProtocolIE-Field.c等、NGAP_で始まらない重要ファイルも含める必要
-NGAP_SRCS := $(wildcard open5gs/lib/asn1c/ngap/*.c)
+# Open5GS の正式なビルド対象を使用する。ディレクトリには旧 ASN.1
+# 生成コードも残っており、*.c の全投入では現行ヘッダーと整合しない。
+NGAP_MANIFEST := open5gs/lib/asn1c/ngap/meson.build
+NGAP_SRCS := $(addprefix open5gs/lib/asn1c/ngap/,$(shell \
+	if [ -f $(NGAP_MANIFEST) ]; then \
+		sed -n 's/^[[:space:]]*\([A-Za-z0-9_-]*\.c\)[[:space:]]*$$/\1/p' $(NGAP_MANIFEST); \
+	fi))
 S1AP_SRCS := $(wildcard include/s1ap/*.c)
 
 # 段階的ビルド: まずソースファイルをコンパイル
 # `src/` 配下の `.c` を再帰的に収集し、将来ディレクトリを追加しても自動追従する
-SRC_EXCLUDES := src/transport/gtp_tunnel_mock.c src/core/s1n2_converter_simple.c
 SRC_FIND := $(shell find src -type f -name '*.c')
-SRC := $(filter-out $(SRC_EXCLUDES),$(sort $(SRC_FIND)))
+SRC := $(sort $(SRC_FIND))
 BIN := build/s1n2-converter
 
 # オブジェクト分割 (Argument list too long 回避 & 再ビルド効率化)
 OBJS := $(patsubst %.c,build/obj/%.o,$(SRC))
 OBJS_NO_MAIN := $(filter-out build/obj/src/app/main.o,$(OBJS))
 ASN1_OBJS := $(patsubst %.c,build/obj/%.o,$(ASN1_RUNTIME_SRCS))
+NGAP_OBJS := $(patsubst %.c,build/obj/%.o,$(NGAP_SRCS))
+S1AP_OBJS := $(patsubst %.c,build/obj/%.o,$(S1AP_SRCS))
 
 # 大量オブジェクト問題解決: 静的ライブラリ作成
 LIBNGAP := build/lib/libngap.a
 LIBS1AP := build/lib/libs1ap.a
 
-# Debug info disabled to avoid infinite loop
-# $(info [INFO] OBJS count=$(words $(OBJS)))
-# $(info [INFO] ASN1_OBJS count=$(words $(ASN1_OBJS)))
-# $(info [INFO] NGAP_SRCS count=$(words $(NGAP_SRCS)))
-# $(info [INFO] S1AP_SRCS count=$(words $(S1AP_SRCS)))
-
-build/obj/%.o: %.c
+# ヘッダー変更と Makefile の変更も再ビルドへ反映する。
+build/obj/%.o: %.c Makefile
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-# 静的ライブラリ作成ルール
-$(LIBNGAP): $(NGAP_SRCS)
+# オブジェクトごとの依存関係で、並列・差分ビルドと失敗の伝播を保つ。
+# アーカイブは作り直し、旧オブジェクト名のメンバーを残さない。
+$(LIBNGAP): $(NGAP_OBJS)
 	@mkdir -p $(dir $@)
-	@echo "[INFO] Building NGAP library with $(words $^) objects..."
-	@for src in $^; do \
-		obj=build/obj/$$src.o; \
-		mkdir -p $$(dirname $$obj); \
-		$(CC) $(CFLAGS) -c $$src -o $$obj; \
-	done
-	@ar rcs $@ build/obj/open5gs/lib/asn1c/ngap/NGAP_*.o
-	@echo "[INFO] NGAP library created: $@"
+	$(RM) $@
+	$(AR) rcs $@ $^
 
-$(LIBS1AP): $(S1AP_SRCS)
+$(LIBS1AP): $(S1AP_OBJS)
 	@mkdir -p $(dir $@)
-	@if [ -n "$^" ]; then \
-		echo "[INFO] Building S1AP library with $(words $^) objects..."; \
-		for src in $^; do \
-			obj=build/obj/$$src.o; \
-			mkdir -p $$(dirname $$obj); \
-			$(CC) $(CFLAGS) -c $$src -o $$obj; \
-		done; \
-		ar rcs $@ build/obj/include/s1ap/*.o; \
-		echo "[INFO] S1AP library created: $@"; \
-	else \
-		echo "[INFO] No S1AP sources found, creating empty library"; \
-		ar rcs $@; \
-	fi
+	$(RM) $@
+	$(AR) rcs $@ $^
 
 .PHONY: _build clean print-objs asn1-objs libs tests test
 
@@ -131,17 +113,26 @@ asn1-objs: $(ASN1_OBJS)
 
 libs: $(LIBNGAP) $(LIBS1AP)
 
-TEST_SRC_FIND := $(sort $(shell find tests -type f -name '*.c'))
+TEST_SRC_FIND := $(sort $(shell if [ -d tests ]; then find tests -type f -name '*.c'; fi))
 TEST_EXCLUDES := tests/stubs.c
 TEST_SRCS := $(filter-out $(TEST_EXCLUDES),$(TEST_SRC_FIND))
 TEST_OBJS := $(patsubst %.c,build/obj/%.o,$(TEST_SRCS))
 TEST_BINS := $(patsubst tests/%.c,build/tests/%,$(TEST_SRCS))
 
+$(OBJS) $(TEST_OBJS): CFLAGS += -Werror=implicit-function-declaration
+
 _build: $(BIN)
 
+ifeq ($(strip $(TEST_SRCS)),)
+tests test:
+	@echo "[ERROR] No unit test sources found under tests/." >&2
+	@exit 1
+else
 tests: $(TEST_BINS)
 
 test: tests
+	@set -e; for test_bin in $(TEST_BINS); do "./$$test_bin"; done
+endif
 
 $(BIN): $(OBJS) $(ASN1_OBJS) $(LIBNGAP) $(LIBS1AP)
 	@mkdir -p $(dir $@)
@@ -154,4 +145,7 @@ build/tests/%: build/obj/tests/%.o $(OBJS_NO_MAIN) $(ASN1_OBJS) $(LIBNGAP) $(LIB
 clean:
 	rm -rf build
 
-
+# テストオブジェクトを中間ファイルとして削除させない。
+.SECONDARY: $(TEST_OBJS)
+DEPS := $(OBJS:.o=.d) $(ASN1_OBJS:.o=.d) $(NGAP_OBJS:.o=.d) $(S1AP_OBJS:.o=.d) $(TEST_OBJS:.o=.d)
+-include $(DEPS)

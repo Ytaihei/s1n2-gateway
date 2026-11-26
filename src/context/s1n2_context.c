@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -28,14 +29,14 @@ void s1n2_context_trace_tau_flags(const ue_id_mapping_t *ue_map, const char *lab
         label = "tau";
     }
     long age = s1n2_context_tau_guard_age(ue_map);
-    printf("[INFO] [TAU] %s: RAN=%ld AMF=%ld in_tau=%d preserve_teid=%d guard_age=%lds\n",
+    LOG_INFO("[TAU] %s: RAN=%ld AMF=%ld in_tau=%d preserve_teid=%d guard_age=%lds\n",
            label,
            ue_map->ran_ue_ngap_id,
            ue_map->amf_ue_ngap_id,
            ue_map->in_tau_procedure ? 1 : 0,
            ue_map->preserve_teid_mapping ? 1 : 0,
            (age >= 0) ? age : -1L);
-    fflush(stdout);
+
 }
 
 void s1n2_register_auth_context(s1n2_context_t *ctx, s1n2_auth_context_t *auth_ctx) {
@@ -155,8 +156,8 @@ ue_id_mapping_t *s1n2_context_create_mapping(s1n2_context_t *ctx,
 
     ue_id_mapping_t *entry = s1n2_context_alloc_mapping(ctx);
     if (!entry) {
-        printf("[WARN] UE mapping table full, cannot create new mapping\n");
-        fflush(stdout);
+        LOG_WARN("UE mapping table full, cannot create new mapping\n");
+
         return NULL;
     }
 
@@ -166,9 +167,9 @@ ue_id_mapping_t *s1n2_context_create_mapping(s1n2_context_t *ctx,
     entry->mme_ue_s1ap_id = mme_id;
     entry->last_update = time(NULL);
 
-    printf("[DEBUG] Created new UE mapping: RAN=%ld, AMF=%ld, ENB=%ld, MME=%ld\n",
+    LOG_DEBUG("Created new UE mapping: RAN=%ld, AMF=%ld, ENB=%ld, MME=%ld\n",
            ran_id, amf_id, enb_id, mme_id);
-    fflush(stdout);
+
     return entry;
 }
 
@@ -179,8 +180,8 @@ ue_id_mapping_t *s1n2_context_ensure_mapping_for_enb(s1n2_context_t *ctx, long e
 
     entry = s1n2_context_alloc_mapping(ctx);
     if (!entry) {
-        printf("[WARN] UE mapping table full, cannot track ENB UE ID %ld\n", enb_id);
-        fflush(stdout);
+        LOG_WARN("UE mapping table full, cannot track ENB UE ID %ld\n", enb_id);
+
         return NULL;
     }
 
@@ -194,9 +195,9 @@ ue_id_mapping_t *s1n2_context_ensure_mapping_for_enb(s1n2_context_t *ctx, long e
         ctx->next_ran_ue_ngap_id = entry->ran_ue_ngap_id + 1;
     }
 
-    printf("[DEBUG] Created UE mapping: ENB=%ld -> RAN=%ld\n",
+    LOG_DEBUG("Created UE mapping: ENB=%ld -> RAN=%ld\n",
            entry->enb_ue_s1ap_id, entry->ran_ue_ngap_id);
-    fflush(stdout);
+
     return entry;
 }
 
@@ -241,10 +242,9 @@ int s1n2_init_context(s1n2_context_t *ctx) {
     }
     ctx->num_e_rab_contexts = 0;
 
-    printf("[DEBUG] s1n2_init_context: E-RAB management initialized - %d contexts available, "
+    LOG_DEBUG("s1n2_init_context: E-RAB management initialized - %d contexts available, "
            "starting PDU Session ID: %u\n",
            16, ctx->next_pdu_session_id);
-    fflush(stdout);
 
     return 0;
 }
@@ -309,7 +309,7 @@ void s1n2_context_cache_5g_guti(ue_id_mapping_t *ue_map,
     uint16_t copy = len;
     if (copy > sizeof(ue_map->last_5g_guti)) {
         copy = sizeof(ue_map->last_5g_guti);
-        printf("[WARN] 5G-GUTI length %u exceeds cache buffer, truncating to %zu bytes\n",
+        LOG_WARN("5G-GUTI length %u exceeds cache buffer, truncating to %zu bytes\n",
                len, sizeof(ue_map->last_5g_guti));
     }
     memcpy(ue_map->last_5g_guti, value, copy);

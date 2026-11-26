@@ -1,0 +1,87 @@
+name: s1n2-virtual-lab
+services:
+  mongo:
+    image: mongo:6.0
+    command: [mongod, --bind_ip_all, --quiet]
+    networks:
+      lab:
+        ipv4_address: 10.203.0.5
+    logging:
+      driver: none
+  core:
+    image: s1n2-virtual-core:2.7.2
+    depends_on: [mongo]
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    volumes:
+      - ./runtime:/runtime
+      - ./runtime/config:/config:ro
+      - ./seed.py:/lab/seed.py:ro
+      - ./start-core.sh:/lab/start-core.sh:ro
+    command: [bash, /lab/start-core.sh]
+    networks:
+      lab:
+        ipv4_address: 10.203.0.10
+    logging:
+      driver: none
+  gateway:
+    image: s1n2-gateway:dev
+    depends_on: [core]
+    environment:
+      S1C_BIND_ADDR: 10.203.0.20
+      S1U_BIND_ADDR: 10.203.0.20
+      S1U_ADVERTISE_ADDR: 10.203.0.20
+      N2_REMOTE_ADDR: 10.203.0.10
+      N3_REMOTE_ADDR: 10.203.0.10
+      UPF_S1U_ADDR: 10.203.0.10
+      S1N2_MCC: '001'
+      S1N2_MNC: '01'
+      S1N2_TAC: '1'
+      AUTH_CONFIG_FILE: /config/auth_keys.yaml
+      S1N2_TAU_EPS_BEARER_IE: '0'
+    volumes:
+      - ./runtime/config:/config:ro
+      - ./runtime/logs:/runtime/logs
+    entrypoint: [/bin/sh, -c]
+    command: ['exec s1n2-converter > /runtime/logs/gateway.log 2>&1']
+    networks:
+      lab:
+        ipv4_address: 10.203.0.20
+    logging:
+      driver: none
+  enb:
+    image: s1n2-virtual-ran:23.11
+    depends_on: [gateway]
+    stdin_open: true
+    volumes:
+      - ./runtime/config:/config:ro
+      - ./runtime/logs:/runtime/logs
+    entrypoint: [/bin/sh, -c]
+    command: ['exec srsenb /config/ran/enb.conf > /runtime/logs/enb-console.log 2>&1']
+    networks:
+      lab:
+        ipv4_address: 10.203.0.30
+    logging:
+      driver: none
+  ue:
+    image: s1n2-virtual-ran:23.11
+    depends_on: [enb]
+    stdin_open: true
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun:/dev/net/tun]
+    volumes:
+      - ./runtime/config:/config:ro
+      - ./runtime/logs:/runtime/logs
+    entrypoint: [/bin/sh, -c]
+    command: ['exec srsue /config/ran/ue.conf > /runtime/logs/ue-console.log 2>&1']
+    networks:
+      lab:
+        ipv4_address: 10.203.0.40
+    logging:
+      driver: none
+networks:
+  lab:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.203.0.0/24

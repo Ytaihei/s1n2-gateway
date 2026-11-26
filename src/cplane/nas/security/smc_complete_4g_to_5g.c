@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file security/smc_complete_4g_to_5g.c
  * @brief 4G Security Mode Complete → 5G Security Mode Complete conversion
@@ -36,7 +37,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
                                   size_t payload_offset,
                                   uint8_t *nas_5g, size_t *nas_5g_len,
                                   s1n2_context_t *ctx, ue_id_mapping_t *ue_map) {
-	printf("[INFO] Converting 4G Security Mode Complete (0x5E) -> 5G Security Mode Complete (0x5E)\n");
+	LOG_INFO("Converting 4G Security Mode Complete (0x5E) -> 5G Security Mode Complete (0x5E)\n");
 
 	size_t offset = payload_offset;
 	uint8_t extras[256];
@@ -92,9 +93,9 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 				extras[extras_len++] = len;
 				memcpy(extras + extras_len, val, len);
 				extras_len += len;
-				printf("[DEBUG] Remapped 4G IMEISV IEI 0x23 -> 5G IEI 0x77 with 2-byte length (TLV-E, len=%u)\n", len);
+
 			} else {
-				printf("[WARN] Insufficient buffer to copy IMEISV IE, skipping passthrough\n");
+
 			}
 		} else if (iei == 0x36) {
 			additional_present = len > 0;
@@ -107,7 +108,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 				memcpy(extras + extras_len, val, len);
 				extras_len += len;
 			} else {
-				printf("[WARN] Insufficient buffer to copy Additional security info IE\n");
+				LOG_WARN("Insufficient buffer to copy Additional security info IE\n");
 			}
 		} else {
 			if (extras_len + 2 + len <= sizeof(extras)) {
@@ -116,7 +117,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 				memcpy(extras + extras_len, val, len);
 				extras_len += len;
 			} else {
-				printf("[WARN] Dropping unsupported IEI 0x%02X due to buffer limit\n", iei);
+				LOG_WARN("Dropping unsupported IEI 0x%02X due to buffer limit\n", iei);
 			}
 		}
 
@@ -139,9 +140,9 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		ngksi_octet = security_map->last_ngksi_octet;
 		security_map->last_update = time(NULL);
 	} else if (security_map) {
-		printf("[WARN] UE mapping found but no cached security mode context yet\n");
+		LOG_WARN("UE mapping found but no cached security mode context yet\n");
 	} else {
-		printf("[WARN] No cached security mode context found for Security Mode Complete conversion\n");
+		LOG_WARN("No cached security mode context found for Security Mode Complete conversion\n");
 	}
 
 	uint8_t ue_cap_buf[8] = {0};
@@ -203,19 +204,19 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 	uint8_t selected_alg_5g = 0x00;
 	if (security_map && security_map->has_selected_alg_5g) {
 		selected_alg_5g = security_map->selected_alg_5g;
-		printf("[DEBUG] Using cached 5G NAS security algorithms octet: 0x%02X\n",
+		LOG_DEBUG("Using cached 5G NAS security algorithms octet: 0x%02X\n",
 			selected_alg_5g);
 	} else if (security_map && security_map->has_security_mode) {
 		uint8_t selected_alg_4g = security_map->selected_nas_security_alg;
-		uint8_t eea = (selected_alg_4g >> 3) & 0x07;
+		uint8_t eea = (selected_alg_4g >> 4) & 0x07;
 		uint8_t eia_val = selected_alg_4g & 0x07;
 		selected_alg_5g = (uint8_t)(((eea & 0x0F) << 4) | (eia_val & 0x0F));
 		security_map->selected_alg_5g = selected_alg_5g;
 		security_map->has_selected_alg_5g = true;
-		printf("[WARN] No cached 5G NAS algorithm octet; deriving from 4G selection (4G=0x%02X -> 5G=0x%02X)\n",
+		LOG_WARN("No cached 5G NAS algorithm octet; deriving from 4G selection (4G=0x%02X -> 5G=0x%02X)\n",
 			selected_alg_4g, selected_alg_5g);
 	} else {
-		printf("[WARN] Unable to determine 5G NAS security algorithms octet for cache update\n");
+		LOG_WARN("Unable to determine 5G NAS security algorithms octet for cache update\n");
 		if (security_map) {
 			security_map->has_selected_alg_5g = false;
 		}
@@ -282,20 +283,19 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 			       security_map->cached_reg_req_len);
 			extras_len += security_map->cached_reg_req_len;
 
-			printf("[INFO] ★ Added NAS message container IE (IEI 0x71) with piggybacked Registration Request (len=%d) ★\n",
+			LOG_INFO("★ Added NAS message container IE (IEI 0x71) with piggybacked Registration Request (len=%d) ★\n",
 			       security_map->cached_reg_req_len);
-			printf("[DEBUG] Container format: IEI=0x71, Len=0x%04x (%d bytes), Data=%d bytes\n",
+			LOG_DEBUG("Container format: IEI=0x71, Len=0x%04x (%d bytes), Data=%d bytes\n",
 			       container_len, container_len, security_map->cached_reg_req_len);
-			fflush(stdout);
+
 		} else {
-			printf("[WARN] Insufficient buffer space for NAS message container, skipping piggybacking\n");
-			fflush(stdout);
+			LOG_WARN("Insufficient buffer space for NAS message container, skipping piggybacking\n");
+
 		}
 	}
 
-	printf("[TRACE] Before extras copy: out=%zu, extras_len=%zu, *nas_5g_len=%zu\n",
+	LOG_TRACE("Before extras copy: out=%zu, extras_len=%zu, *nas_5g_len=%zu\n",
 	       out, extras_len, *nas_5g_len);
-	fflush(stdout);
 
 	if (extras_len > 0) {
 		if (out + extras_len > *nas_5g_len) {
@@ -307,15 +307,13 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		out += extras_len;
 	}
 
-	printf("[TRACE] After extras copy: out=%zu\n", out);
-	fflush(stdout);
+	LOG_TRACE("After extras copy: out=%zu\n", out);
 
 	// At this point, nas_5g[0..out-1] contains the complete plain 5G NAS message
 	// Now add 5G Integrity Protection if security context is available
 
-	printf("[TRACE] Checking Integrity Protection: security_map=%p, has_nas_keys=%d\n",
+	LOG_TRACE("Checking Integrity Protection: security_map=%p, has_nas_keys=%d\n",
 	       (void*)security_map, security_map ? security_map->has_nas_keys : -1);
-	fflush(stdout);
 
 	if (security_map && security_map->has_5g_nas_keys) {
 		uint8_t mac[4];
@@ -329,7 +327,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 			size_t protected_len = 2 /*EPD+SecHdr*/ + 4 /*MAC*/ + 1 /*SEQ*/ + out;
 
 			if (*nas_5g_len < protected_len) {
-				printf("[ERROR] Output buffer too small for protected 5G NAS (need %zu, have %zu)\n",
+				LOG_ERROR("Output buffer too small for protected 5G NAS (need %zu, have %zu)\n",
 					   protected_len, *nas_5g_len);
 				return -1;
 			}
@@ -337,7 +335,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 			// Assemble into a temporary buffer to avoid overlap
 			uint8_t tmp[1024];
 			if (protected_len > sizeof(tmp)) {
-				printf("[ERROR] Temporary buffer too small for protected NAS (need %zu)\n", protected_len);
+				LOG_ERROR("Temporary buffer too small for protected NAS (need %zu)\n", protected_len);
 				return -1;
 			}
 
@@ -356,31 +354,28 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 			memcpy(nas_5g, tmp, off);
 			*nas_5g_len = off;
 
-			printf("[INFO] Built 5G Security Protected NAS (SMC Complete) with integrity\n");
-			printf("[DEBUG] SecHdr=0x03, SEQ=0x%02X, MAC=%02X %02X %02X %02X, plain_len=%zu, total_len=%zu\n",
-				   seq, mac[0], mac[1], mac[2], mac[3], out, off);
+			LOG_INFO("Built 5G Security Protected NAS (SMC Complete) with integrity\n");
 
 			/* COUNT++ AFTER MAC computation — ordering is security-critical */
-			printf("[DEBUG] [COUNT-INC] Before increment: nas_ul_count_5g=0x%08X\n",
+			LOG_DEBUG("[COUNT-INC] Before increment: nas_ul_count_5g=0x%08X\n",
 				   ((ue_id_mapping_t*)security_map)->nas_ul_count_5g);
 			((ue_id_mapping_t*)security_map)->nas_ul_count_5g++;
-			printf("[DEBUG] [COUNT-INC] After increment: nas_ul_count_5g=0x%08X\n",
+			LOG_DEBUG("[COUNT-INC] After increment: nas_ul_count_5g=0x%08X\n",
 				   ((ue_id_mapping_t*)security_map)->nas_ul_count_5g);
 			((ue_id_mapping_t*)security_map)->has_sent_smc = true;
 
-			fflush(stdout);
 		} else {
-			printf("[ERROR] Failed to compute 5G uplink MAC for integrity protection\n");
+			LOG_ERROR("Failed to compute 5G uplink MAC for integrity protection\n");
 			return -1;
 		}
 	} else if (security_map && security_map->has_nas_keys) {
 		// Fallback: Use 4G security context
-		printf("[WARN] Using 4G security context (5G keys not available)\n");
-		printf("[INFO] Sending plain 5G NAS to AMF (no 5G keys)\n");
+		LOG_WARN("Using 4G security context (5G keys not available)\n");
+		LOG_INFO("Sending plain 5G NAS to AMF (no 5G keys)\n");
 		*nas_5g_len = out; // cannot integrity-protect without 5G NAS keys
 	} else {
 		// No security context available, send plain
-		printf("[INFO] No security context available, sending plain Security Mode Complete\n");
+		LOG_INFO("No security context available, sending plain Security Mode Complete\n");
 		*nas_5g_len = out;
 	}
 
@@ -396,7 +391,7 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		 imeisv_detail,
 		 additional_present ? "present" : "absent");
 	s1n2_log_security_mode_result("uplink", true, first_byte & 0x0F, msg_type, detail);
-	printf("[INFO] 5G Security Mode Complete created (len=%zu, UEcap=%u)\n", out, ue_cap_len);
+	LOG_INFO("5G Security Mode Complete created (len=%zu, UEcap=%u)\n", out, ue_cap_len);
 
 	// Derive KeNB from KASME (for Initial Context Setup Request)
 	// MME derives KeNB after receiving Security Mode Complete (TS 33.401 A.3)
@@ -405,18 +400,14 @@ int smc_complete_convert_4g_to_5g(const uint8_t *nas_4g, size_t nas_4g_len,
 		if (s1n2_kdf_kenb(security_map->kasme, ul_count, security_map->kenb) == 0) {
 			security_map->has_kenb = true;
 			security_map->kenb_ul_count = ul_count;
-			printf("[SUCCESS] KeNB derived from KASME (COUNT=0x%08X)\n", ul_count);
-			printf("[DEBUG] KeNB(first 8): ");
-			for (int i = 0; i < 8; i++) printf("%02X", security_map->kenb[i]);
-			printf("..\n");
+
 		} else {
 			security_map->has_kenb = false;
-			printf("[ERROR] Failed to derive KeNB from KASME\n");
+
 		}
 	} else {
-		printf("[WARN] KASME not available, cannot derive KeNB\n");
+
 	}
 
-	fflush(stdout);
 	return 0;
 }

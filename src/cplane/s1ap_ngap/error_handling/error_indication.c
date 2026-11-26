@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file error_indication.c
  * @brief NGAP ErrorIndication builder + S1AP handler
@@ -150,12 +151,12 @@ int s1n2_handle_s1ap_error_indication(s1n2_context_t *ctx, void *raw_msg) {
     s1n2_copy_s1ap_cause_to_ngap(s1ap_cause, &ngap_cause);
     long s1ap_cause_value = s1n2_get_s1ap_cause_value(s1ap_cause);
 
-    printf("[WARN] Detected S1AP ErrorIndication (ENB=%ld, MME=%ld, diag=%d)\n",
+    LOG_WARN("Detected S1AP ErrorIndication (ENB=%ld, MME=%ld, diag=%d)\n",
            enb_id, mme_id, has_diag);
-    printf("[WARN] [BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
+    LOG_WARN("[BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
            ran_ue_ngap_id, amf_ue_ngap_id, map ? "hit" : "miss");
-    printf("[WARN] [BRIDGE] Cause present=%d value=%ld\n",
-           s1ap_cause ? s1ap_cause->present : -1, s1ap_cause_value);
+    LOG_WARN("[BRIDGE] Cause present=%d value=%ld\n",
+           s1ap_cause ? (int)s1ap_cause->present : -1, s1ap_cause_value);
 
     uint8_t ngap_buf[512];
     size_t ngap_len = sizeof(ngap_buf);
@@ -167,18 +168,17 @@ int s1n2_handle_s1ap_error_indication(s1n2_context_t *ctx, void *raw_msg) {
             ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_buf, ngap_len,
                                         NULL, 0, htonl(60), 0, 0, 0, 0);
             if (sent == (ssize_t)ngap_len) {
-                printf("[WARN] [BRIDGE] ErrorIndication forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
+                LOG_WARN("[BRIDGE] ErrorIndication forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
             } else {
-                printf("[ERROR] Failed to forward ErrorIndication to NGAP (ret=%zd, errno=%d)\n",
+                LOG_ERROR("Failed to forward ErrorIndication to NGAP (ret=%zd, errno=%d)\n",
                        sent, errno);
             }
         } else {
-            printf("[WARN] Cannot forward ErrorIndication: N2 socket unavailable\n");
+            LOG_WARN("Cannot forward ErrorIndication: N2 socket unavailable\n");
         }
     } else {
-        printf("[ERROR] Failed to build NGAP ErrorIndication\n");
+        LOG_ERROR("Failed to build NGAP ErrorIndication\n");
     }
 
-    fflush(stdout);
     return 0;
 }

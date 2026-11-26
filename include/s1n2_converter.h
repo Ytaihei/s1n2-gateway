@@ -154,6 +154,8 @@ typedef struct ue_id_mapping {
 
     // 5G NAS security context
     uint32_t nas_ul_count_5g;          // Uplink NAS COUNT (5G) - for MAC calculation
+    uint32_t nas_dl_count_5g;          // Last authenticated downlink COUNT (24 bits)
+    bool has_nas_dl_count_5g;
     bool has_sent_smc;                 // Security Mode Complete sent flag
 
     // Registration Request caching (for piggybacked re-transmission after Security Mode Complete)
@@ -191,6 +193,12 @@ typedef struct ue_id_mapping {
     uint8_t qci;                               // QCI from E-RAB setup
     uint8_t qfi;                               // Mapped 5QI/QFI for 5G
     char apn[64];                              // APN/DNN name
+    uint8_t pdu_ipv4[4];
+    bool has_pdu_ipv4;
+    uint8_t pending_registration_accept[512];
+    size_t pending_registration_accept_len;
+    bool registration_complete_sent;
+    bool pdu_session_requested;
     bool send_pdu_session_establishment;       // Flag to send PDU Session Establishment Request after Reg Complete
 
     // User Location Information (cached from S1AP/NGAP messages for NGAP UplinkNASTransport)

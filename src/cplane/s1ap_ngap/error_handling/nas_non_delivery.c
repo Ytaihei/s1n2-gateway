@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file nas_non_delivery.c
  * @brief NGAP NASNonDeliveryIndication builder + S1AP handler
@@ -154,16 +155,16 @@ int s1n2_handle_s1ap_nas_non_delivery(s1n2_context_t *ctx, void *raw_msg) {
     }
 
     if (!nas || !nas->buf || nas->size == 0) {
-        printf("[ERROR] NASNonDeliveryIndication missing NAS PDU; nothing to forward\n");
-        fflush(stdout);
+        LOG_ERROR("NASNonDeliveryIndication missing NAS PDU; nothing to forward\n");
+
         return 0;
     }
 
     size_t nas_len = nas->size;
     uint8_t *nas_copy = calloc(1, nas_len);
     if (!nas_copy) {
-        printf("[ERROR] Failed to allocate buffer for NASNonDeliveryIndication NAS PDU (len=%zu)\n", nas_len);
-        fflush(stdout);
+        LOG_ERROR("Failed to allocate buffer for NASNonDeliveryIndication NAS PDU (len=%zu)\n", nas_len);
+
         return 0;
     }
     memcpy(nas_copy, nas->buf, nas_len);
@@ -184,12 +185,12 @@ int s1n2_handle_s1ap_nas_non_delivery(s1n2_context_t *ctx, void *raw_msg) {
     long s1ap_cause_value = s1n2_get_s1ap_cause_value(s1ap_cause);
     uint32_t nas_crc = s1n2_crc32(nas_copy, nas_len);
 
-    printf("[WARN] Detected S1AP NASNonDeliveryIndication (ENB=%ld, MME=%ld, NAS len=%zu, CRC=0x%08X)\n",
+    LOG_WARN("Detected S1AP NASNonDeliveryIndication (ENB=%ld, MME=%ld, NAS len=%zu, CRC=0x%08X)\n",
            enb_id, mme_id, nas_len, nas_crc);
-    printf("[WARN] [BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
+    LOG_WARN("[BRIDGE] Mapping -> RAN=%ld, AMF=%ld (map=%s)\n",
            ran_ue_ngap_id, amf_ue_ngap_id, map ? "hit" : "miss");
-    printf("[WARN] [BRIDGE] Cause present=%d value=%ld\n",
-           s1ap_cause ? s1ap_cause->present : -1, s1ap_cause_value);
+    LOG_WARN("[BRIDGE] Cause present=%d value=%ld\n",
+           s1ap_cause ? (int)s1ap_cause->present : -1, s1ap_cause_value);
 
     uint8_t ngap_buf[768];
     size_t ngap_len = sizeof(ngap_buf);
@@ -201,19 +202,19 @@ int s1n2_handle_s1ap_nas_non_delivery(s1n2_context_t *ctx, void *raw_msg) {
             ssize_t sent = sctp_sendmsg(ctx->n2_fd, ngap_buf, ngap_len,
                                         NULL, 0, htonl(60), 0, 0, 0, 0);
             if (sent == (ssize_t)ngap_len) {
-                printf("[WARN] [BRIDGE] NASNonDeliveryIndication forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
+                LOG_WARN("[BRIDGE] NASNonDeliveryIndication forwarded to NGAP (%zd bytes, PPID=60)\n", sent);
             } else {
-                printf("[ERROR] Failed to forward NASNonDeliveryIndication to NGAP (ret=%zd, errno=%d)\n",
+                LOG_ERROR("Failed to forward NASNonDeliveryIndication to NGAP (ret=%zd, errno=%d)\n",
                        sent, errno);
             }
         } else {
-            printf("[WARN] Cannot forward NASNonDeliveryIndication: N2 socket unavailable\n");
+            LOG_WARN("Cannot forward NASNonDeliveryIndication: N2 socket unavailable\n");
         }
     } else {
-        printf("[ERROR] Failed to build NGAP NASNonDeliveryIndication\n");
+        LOG_ERROR("Failed to build NGAP NASNonDeliveryIndication\n");
     }
 
     free(nas_copy);
-    fflush(stdout);
+
     return 0;
 }

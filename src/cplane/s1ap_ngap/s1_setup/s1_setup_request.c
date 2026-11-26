@@ -1,3 +1,4 @@
+#include "s1n2_log.h"
 /**
  * @file s1_setup_request.c
  * @brief S1AP S1SetupRequest to NGAP NGSetupRequest conversion
@@ -88,8 +89,8 @@ int s1n2_convert_s1setup_to_ngsetup(uint8_t *s1ap_data, size_t s1ap_len,
             }
         }
     } else {
-        printf("[WARN] S1AP decode failed or not S1SetupRequest (code=%d)\n", dr.code);
-        fflush(stdout);
+        LOG_WARN("S1AP decode failed or not S1SetupRequest (code=%d)\n", dr.code);
+
     }
 
     if (pdu) {
@@ -124,12 +125,12 @@ int s1n2_convert_s1setup_to_ngsetup(uint8_t *s1ap_data, size_t s1ap_len,
                                          env_mcc, env_mnc, tac_val, gnb_id, env_name);
     if (enc > 0) {
         *ngap_len = dyn_len;
-        printf("[INFO] Dynamic NGSetupRequest encoded (%zu bytes)\n", dyn_len);
-        fflush(stdout);
+        LOG_INFO("Dynamic NGSetupRequest encoded (%zu bytes)\n", dyn_len);
+
         return 0;
     }
 
-    printf("[ERROR] build_ngsetup_request_args failed\n");
-    fflush(stdout);
+    LOG_ERROR("build_ngsetup_request_args failed\n");
+
     return -1;
 }
